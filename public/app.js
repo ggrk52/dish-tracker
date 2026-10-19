@@ -44,6 +44,87 @@ let cloudEventSource = null;
 let currentHistoryFilter = 'all';
 
 // ========================================================
+// AUTH & ACCESS RIGHTS (Пароль "мамамолодец")
+// ========================================================
+const AUTH_STORAGE_KEY = 'dish_tracker_admin_auth';
+const ADMIN_PASSWORD_NORMALIZED = 'мамамолодец';
+
+function getSavedAdminPassword() {
+  return localStorage.getItem(AUTH_STORAGE_KEY) || '';
+}
+
+function normalizePassword(pass) {
+  if (!pass || typeof pass !== 'string') return '';
+  return pass.trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+function isAdmin() {
+  return normalizePassword(getSavedAdminPassword()) === ADMIN_PASSWORD_NORMALIZED;
+}
+
+let pendingAuthAction = null;
+
+function requireAdmin(actionCallback) {
+  if (isAdmin()) {
+    actionCallback();
+    return;
+  }
+  openAuthModal(actionCallback);
+}
+
+function openAuthModal(callback = null) {
+  if (callback) pendingAuthAction = callback;
+  const input = document.getElementById('input-admin-pass');
+  if (input) {
+    input.value = '';
+    setTimeout(() => input.focus(), 150);
+  }
+  const err = document.getElementById('auth-error-msg');
+  if (err) err.classList.add('hidden');
+  openModal('modal-auth');
+}
+
+function handleAuthSubmit() {
+  const input = document.getElementById('input-admin-pass');
+  const err = document.getElementById('auth-error-msg');
+  const entered = input ? input.value : '';
+
+  if (normalizePassword(entered) === ADMIN_PASSWORD_NORMALIZED) {
+    localStorage.setItem(AUTH_STORAGE_KEY, ADMIN_PASSWORD_NORMALIZED);
+    closeAllModals();
+    if (window.soundFx) soundFx.playVictory();
+    showToast('👑 Режим управления активирован!', '🎉');
+    renderAuthStatus();
+
+    if (typeof pendingAuthAction === 'function') {
+      const fn = pendingAuthAction;
+      pendingAuthAction = null;
+      fn();
+    }
+  } else {
+    if (err) err.classList.remove('hidden');
+    if (window.soundFx) soundFx.playPop();
+    if (input) {
+      input.classList.add('input-shake');
+      setTimeout(() => input.classList.remove('input-shake'), 400);
+    }
+  }
+}
+
+function logoutAdmin() {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  if (window.soundFx) soundFx.playClick();
+  showToast('🔒 Переключено в режим просмотра', '👁️');
+  renderAuthStatus();
+}
+
+window.isAdmin = isAdmin;
+window.requireAdmin = requireAdmin;
+window.openAuthModal = openAuthModal;
+window.handleAuthSubmit = handleAuthSubmit;
+window.logoutAdmin = logoutAdmin;
+
+// ========================================================
 // STORAGE & SETTINGS LOAD/SAVE
 // ========================================================
 function loadState() {
@@ -422,18 +503,34 @@ function connectLocalServerSSE() {
 }
 
 async function pushStateToCloud() {
+  if (!isAdmin()) {
+    console.warn('Blocked: Only admin phone can push changes to server.');
+    return;
+  }
   // Always push directly to Master Raspberry Pi server
   try {
+    const adminPass = getSavedAdminPassword() || 'мамамолодец';
+    const payload = {
+      ...state,
+      _adminPassword: adminPass
+    };
     const res = await fetch('/api/state', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state)
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Password': encodeURIComponent(adminPass)
+      },
+      body: JSON.stringify(payload)
     });
     if (res.ok) {
       const dot = document.querySelector('.cloud-dot');
       const label = document.getElementById('cloud-status-label');
       if (dot) dot.className = 'cloud-dot local-connected';
       if (label) label.textContent = 'Сервер онлайн 🟢';
+    } else if (res.status === 403) {
+      console.warn('Server rejected update: invalid admin password.');
+      logoutAdmin();
+      alert('Ошибка доступа: пароль администратора на сервере не совпал.');
     }
   } catch (e) {
     console.warn('Failed to push state to server:', e);
@@ -576,6 +673,7 @@ function renderAll() {
   renderDutyTab();
   renderHistory();
   renderStats();
+  renderAuthStatus();
 }
 
 function renderDutyTab() {
@@ -983,10 +1081,32 @@ function escapeHtml(text) {
 // TOAST NOTIFICATION
 // ========================================================
 let toastTimeout = null;
+
+function showToast(text, icon = '✨', duration = 4000) {
+  const toast = document.getElementById('undo-toast');
+  const textEl = document.getElementById('undo-text');
+  const iconEl = toast ? toast.querySelector('.toast-icon') : null;
+  const undoBtn = document.getElementById('btn-undo');
+  if (textEl) textEl.textContent = text;
+  if (iconEl) iconEl.textContent = icon;
+  if (undoBtn) undoBtn.style.display = 'none';
+  if (toast) toast.classList.remove('hidden');
+
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    hideUndoToast();
+  }, duration);
+}
+
 function showUndoToast(text, duration = 8000) {
   const toast = document.getElementById('undo-toast');
-  document.getElementById('undo-text').textContent = text;
-  toast.classList.remove('hidden');
+  const textEl = document.getElementById('undo-text');
+  const iconEl = toast ? toast.querySelector('.toast-icon') : null;
+  const undoBtn = document.getElementById('btn-undo');
+  if (textEl) textEl.textContent = text;
+  if (iconEl) iconEl.textContent = '🧼';
+  if (undoBtn) undoBtn.style.display = '';
+  if (toast) toast.classList.remove('hidden');
 
   if (toastTimeout) clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => {
@@ -995,8 +1115,96 @@ function showUndoToast(text, duration = 8000) {
 }
 
 function hideUndoToast() {
-  document.getElementById('undo-toast').classList.add('hidden');
+  const toast = document.getElementById('undo-toast');
+  if (toast) toast.classList.add('hidden');
+  const undoBtn = document.getElementById('btn-undo');
+  if (undoBtn) undoBtn.style.display = '';
+  const iconEl = toast ? toast.querySelector('.toast-icon') : null;
+  if (iconEl) iconEl.textContent = '🧼';
   if (toastTimeout) clearTimeout(toastTimeout);
+}
+
+// ========================================================
+// AUTH UI STATUS RENDERING
+// ========================================================
+function renderAuthStatus() {
+  const admin = isAdmin();
+
+  // 1. Header button
+  const authBadge = document.getElementById('btn-auth-badge');
+  const authIcon = document.getElementById('auth-badge-icon');
+  if (authBadge && authIcon) {
+    if (admin) {
+      authBadge.classList.add('is-admin');
+      authIcon.textContent = '👑';
+      authBadge.title = '👑 Вы в режиме управления (Мама). Нажмите, чтобы выйти';
+    } else {
+      authBadge.classList.remove('is-admin');
+      authIcon.textContent = '🔒';
+      authBadge.title = '🔒 Режим просмотра. Нажмите, чтобы войти с паролем';
+    }
+  }
+
+  // 2. Readonly Banner in Tab 1
+  const banner = document.getElementById('banner-readonly');
+  if (banner) {
+    if (admin) {
+      banner.classList.add('hidden');
+    } else {
+      banner.classList.remove('hidden');
+    }
+  }
+
+  // 3. Wash button appearance
+  const washBtn = document.getElementById('btn-wash-done');
+  if (washBtn) {
+    if (admin) {
+      washBtn.classList.remove('btn-locked');
+      washBtn.innerHTML = `
+        <div class="wash-btn-shine"></div>
+        <span class="wash-icon">🧼</span>
+        <div class="wash-label-box">
+          <span class="wash-title">Я ПОМЫЛ ПОСУДУ!</span>
+          <span class="wash-sub">Передать очередь дальше ✨</span>
+        </div>
+      `;
+    } else {
+      washBtn.classList.add('btn-locked');
+      washBtn.innerHTML = `
+        <span class="wash-icon">🔒</span>
+        <div class="wash-label-box">
+          <span class="wash-title">РЕЖИМ ПРОСМОТРА</span>
+          <span class="wash-sub">Нажмите, чтобы ввести пароль 🔑</span>
+        </div>
+      `;
+    }
+  }
+
+  // 4. Settings modal section
+  const settingsBadge = document.getElementById('settings-auth-badge');
+  const settingsDesc = document.getElementById('settings-auth-desc');
+  const settingsActions = document.getElementById('settings-auth-actions');
+  if (settingsBadge && settingsDesc && settingsActions) {
+    if (admin) {
+      settingsBadge.className = 'setup-badge';
+      settingsBadge.textContent = '👑 Режим управления';
+      settingsDesc.textContent = 'Этот телефон авторизован. Вы можете отмечать помывку и менять порядок очереди.';
+      settingsActions.innerHTML = `
+        <button type="button" class="secondary-action-btn" onclick="logoutAdmin(); closeAllModals();">
+          Выйти из режима управления
+        </button>
+      `;
+    } else {
+      settingsBadge.className = 'setup-badge neutral';
+      settingsBadge.textContent = '🔒 Только просмотр';
+      settingsDesc.textContent = 'Изменять статус и очередь может только мама с паролем (мамамолодец).';
+      settingsActions.innerHTML = `
+        <button type="button" class="primary-action-btn" onclick="closeAllModals(); openAuthModal();">
+          Ввести пароль (мамамолодец) 🔑
+        </button>
+      `;
+    }
+  }
 }
 
 // ========================================================
@@ -1062,7 +1270,9 @@ function openSwapModal() {
       <span style="font-size:2.2rem;">${m.avatar}</span>
       <span style="font-weight:700; font-size:0.95rem;">${m.name}</span>
     `;
-    card.addEventListener('click', () => handleSwapTurn(m.id));
+    card.addEventListener('click', () => {
+      requireAdmin(() => handleSwapTurn(m.id));
+    });
     grid.appendChild(card);
   });
 
@@ -1111,13 +1321,15 @@ function openReorderModal() {
   renderRows();
 
   document.getElementById('btn-save-reorder-modal').onclick = () => {
-    state.queue = [...tempQueue];
-    state.currentQueueIndex = 0;
-    state.dutyStartedAt = Date.now();
-    saveState();
-    renderAll();
-    soundFx.playClick();
-    closeAllModals();
+    requireAdmin(() => {
+      state.queue = [...tempQueue];
+      state.currentQueueIndex = 0;
+      state.dutyStartedAt = Date.now();
+      saveState();
+      renderAll();
+      closeAllModals();
+      soundFx.playVictory();
+    });
   };
 
   openModal('modal-reorder');
@@ -1227,23 +1439,64 @@ document.addEventListener('DOMContentLoaded', () => {
     settings.activeTab = 'tab-duty';
   }
 
+  // Auth button in header
+  const btnAuthBadge = document.getElementById('btn-auth-badge');
+  if (btnAuthBadge) {
+    btnAuthBadge.addEventListener('click', () => {
+      if (isAdmin()) {
+        if (confirm('Вы авторизованы как администратор (Мама).\n\nВыйти из режима управления на этом телефоне?')) {
+          logoutAdmin();
+        }
+      } else {
+        openAuthModal();
+      }
+    });
+  }
+
+  // Banner login button
+  const btnBannerLogin = document.getElementById('btn-banner-login');
+  if (btnBannerLogin) {
+    btnBannerLogin.addEventListener('click', () => {
+      openAuthModal();
+    });
+  }
+
+  // Auth form submission
+  const formAuth = document.getElementById('form-admin-auth');
+  if (formAuth) {
+    formAuth.addEventListener('submit', (e) => {
+      e.preventDefault();
+      handleAuthSubmit();
+    });
+  }
+
   // Main Wash button
   document.getElementById('btn-wash-done').addEventListener('click', () => {
-    handleWashDone();
+    requireAdmin(() => handleWashDone());
   });
 
   // Undo button
-  document.getElementById('btn-undo').addEventListener('click', handleUndo);
+  document.getElementById('btn-undo').addEventListener('click', () => {
+    requireAdmin(() => handleUndo());
+  });
 
   // Turn Modifiers
-  document.getElementById('btn-skip-duty').addEventListener('click', handleSkipTurn);
-  document.getElementById('btn-swap-duty').addEventListener('click', openSwapModal);
-  document.getElementById('btn-reorder-queue').addEventListener('click', openReorderModal);
+  document.getElementById('btn-skip-duty').addEventListener('click', () => {
+    requireAdmin(() => handleSkipTurn());
+  });
+  document.getElementById('btn-swap-duty').addEventListener('click', () => {
+    requireAdmin(() => openSwapModal());
+  });
+  document.getElementById('btn-reorder-queue').addEventListener('click', () => {
+    requireAdmin(() => openReorderModal());
+  });
 
   // Note Modal
   document.getElementById('btn-add-note').addEventListener('click', () => {
-    document.getElementById('modal-note-text').value = '';
-    openModal('modal-note');
+    requireAdmin(() => {
+      document.getElementById('modal-note-text').value = '';
+      openModal('modal-note');
+    });
   });
 
   document.querySelectorAll('.note-tag-btn').forEach(btn => {
@@ -1256,9 +1509,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('btn-submit-note-wash').addEventListener('click', () => {
-    const note = document.getElementById('modal-note-text').value;
-    closeAllModals();
-    handleWashDone(note);
+    requireAdmin(() => {
+      const note = document.getElementById('modal-note-text').value;
+      closeAllModals();
+      handleWashDone(note);
+    });
   });
 
   // View all history button from Tab 1
@@ -1332,7 +1587,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileImportInput = document.getElementById('file-import-input');
   if (btnImportBackup && fileImportInput) {
     btnImportBackup.addEventListener('click', () => {
-      fileImportInput.click();
+      requireAdmin(() => fileImportInput.click());
     });
     fileImportInput.addEventListener('change', handleImportJSON);
   }
@@ -1341,14 +1596,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnResetData = document.getElementById('btn-reset-data');
   if (btnResetData) {
     btnResetData.addEventListener('click', () => {
-      if (confirm('ВНИМАНИЕ: Вы уверены, что хотите сбросить всю историю и статистику мытья посуды?')) {
-        state.history = [];
-        state.stats = { mama: 0, papa: 0, serezha: 0, vasya: 0 };
-        saveState();
-        renderAll();
-        soundFx.playClick();
-        alert('Данные сброшены.');
-      }
+      requireAdmin(() => {
+        if (confirm('ВНИМАНИЕ: Вы уверены, что хотите сбросить всю историю и статистику мытья посуды?')) {
+          state.history = [];
+          state.stats = { mama: 0, papa: 0, serezha: 0, vasya: 0 };
+          saveState();
+          renderAll();
+          soundFx.playClick();
+          alert('Данные сброшены.');
+        }
+      });
     });
   }
 

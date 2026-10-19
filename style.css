@@ -1430,3 +1430,125 @@ body {
     padding: 20px 24px;
   }
 }
+
+/* ========================================== */
+/* AUTH & ACCESS RIGHTS (Пароль "мамамолодец") */
+/* ========================================== */
+
+.auth-badge-btn {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.auth-badge-btn.is-admin {
+  background: rgba(234, 179, 8, 0.16) !important;
+  border-color: rgba(234, 179, 8, 0.6) !important;
+  box-shadow: 0 0 12px rgba(234, 179, 8, 0.35);
+}
+
+.auth-badge-btn.is-admin .btn-icon {
+  filter: drop-shadow(0 0 2px rgba(234, 179, 8, 0.8));
+}
+
+.readonly-banner {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid #f59e0b;
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  box-shadow: var(--shadow-sm);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.readonly-banner.hidden {
+  display: none !important;
+}
+
+.readonly-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+.readonly-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.readonly-login-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+  flex-shrink: 0;
+}
+
+.readonly-login-btn:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.btn-wash-main.btn-locked {
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  opacity: 0.95;
+}
+
+.btn-wash-main.btn-locked:hover {
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  opacity: 1;
+}
+
+.btn-wash-main.btn-locked .wash-btn-shine {
+  display: none;
+}
+
+.auth-error-msg {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 8px;
+  text-align: center;
+  animation: fadeIn 0.15s ease;
+}
+
+.auth-error-msg.hidden {
+  display: none !important;
+}
+
+.auth-section {
+  border-left: 4px solid #3b82f6;
+}
+
+.input-shake {
+  animation: shakeX 0.35s ease-in-out;
+}
+
+@keyframes shakeX {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}

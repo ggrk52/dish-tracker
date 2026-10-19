@@ -35,6 +35,9 @@
       </div>
       
       <div class="top-actions">
+        <button id="btn-auth-badge" class="nav-icon-btn auth-badge-btn" title="Права доступа (мамамолодец)" aria-label="Права доступа">
+          <span id="auth-badge-icon" class="btn-icon">🔒</span>
+        </button>
         <button id="btn-sound" class="nav-icon-btn" title="Звуки" aria-label="Звуки">
           <span class="btn-icon">🔊</span>
         </button>
@@ -66,6 +69,15 @@
       <!-- TAB 1: DUTY / ДЕЖУРСТВО                    -->
       <!-- ========================================== -->
       <section id="tab-duty" class="tab-view active">
+        <!-- Read-Only Notice (Visible on non-admin phones) -->
+        <div id="banner-readonly" class="readonly-banner hidden">
+          <div class="readonly-banner-content">
+            <span class="readonly-icon">🔒</span>
+            <span class="readonly-text"><b>Режим просмотра:</b> переключать очередь может только мама.</span>
+          </div>
+          <button id="btn-banner-login" class="readonly-login-btn">Войти 🔑</button>
+        </div>
+
         <!-- Main Hero Card: Current Duty -->
         <div class="duty-hero-card" id="duty-hero">
           <div class="duty-status-badge">
@@ -226,6 +238,20 @@
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
 
+      <!-- Access Rights (Пароль "мамамолодец") -->
+      <div class="cloud-setup-box auth-section">
+        <div class="setup-header">
+          <span class="setup-badge" id="settings-auth-badge">Режим просмотра</span>
+          <span class="setup-title">Права на управление</span>
+        </div>
+        <p id="settings-auth-desc" class="setup-text">
+          Только один телефон с паролем может переключать очередь и отмечать помывку.
+        </p>
+        <div id="settings-auth-actions" style="margin-top: 8px;">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
       <!-- Server & Local Network -->
       <div class="cloud-setup-box secondary">
         <div class="setup-header">
@@ -358,6 +384,30 @@
         </div>
       </div>
       <button type="button" class="primary-btn-block modal-close-btn" onclick="closeAllModals()">Понятно, спасибо!</button>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: Password Auth ("мамамолодец")       -->
+  <!-- ========================================== -->
+  <div id="modal-auth" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>🔐 Вход для управления</h3>
+        <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
+      </div>
+      <p class="modal-sub">
+        Отмечать помывку и менять очередь может только мама. Введите пароль:
+      </p>
+      <form id="form-admin-auth">
+        <div class="input-group">
+          <input type="password" id="input-admin-pass" class="custom-input" placeholder="Введите пароль..." autocomplete="current-password">
+        </div>
+        <div id="auth-error-msg" class="auth-error-msg hidden">❌ Неверный пароль. Попробуйте еще раз!</div>
+        <button type="submit" id="btn-submit-auth" class="primary-btn-block" style="margin-top: 10px;">
+          Войти в режим управления 🔓
+        </button>
+      </form>
     </div>
   </div>
 

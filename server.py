@@ -93,6 +93,29 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
             raw_body = self.rfile.read(length).decode("utf-8")
             try:
                 state_data = json.loads(raw_body)
+                
+                # Check admin password
+                auth_pass = self.headers.get("X-Admin-Password", "")
+                if auth_pass:
+                    from urllib.parse import unquote
+                    auth_pass = unquote(auth_pass)
+                if not auth_pass and isinstance(state_data, dict):
+                    auth_pass = state_data.get("_adminPassword", "")
+
+                clean_pass = (auth_pass or "").strip().lower().replace("ё", "е")
+                if clean_pass != "мамамолодец":
+                    err_body = json.dumps({"error": "Требуется пароль администратора ('мамамолодец')"}).encode("utf-8")
+                    self.send_response(403)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(err_body)))
+                    self.end_headers()
+                    self.wfile.write(err_body)
+                    return
+
+                # Remove temporary auth field before persisting
+                if isinstance(state_data, dict) and "_adminPassword" in state_data:
+                    del state_data["_adminPassword"]
+
                 save_state(state_data)
                 res_body = json.dumps({"success": True}).encode("utf-8")
                 self.send_response(200)

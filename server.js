@@ -129,12 +129,32 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const parsedState = JSON.parse(body);
+
+        let authPass = req.headers['x-admin-password'] || '';
+        if (authPass) {
+          try { authPass = decodeURIComponent(authPass); } catch (e) {}
+        }
+        if (!authPass && parsedState && parsedState._adminPassword) {
+          authPass = parsedState._adminPassword;
+        }
+
+        const cleanPass = (authPass || '').trim().toLowerCase().replace(/ё/g, 'е');
+        if (cleanPass !== 'мамамолодец') {
+          res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: "Требуется пароль администратора ('мамамолодец')" }));
+          return;
+        }
+
+        if (parsedState && parsedState._adminPassword) {
+          delete parsedState._adminPassword;
+        }
+
         if (parsedState && parsedState.queue) {
           saveStateToDisk(parsedState);
           broadcastUpdate(parsedState);
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ success: true }));
-          console.log(`[${new Date().toLocaleTimeString()}] Посуда обновлена! Синхронизировано на всех устройствах.`);
+          console.log(`[${new Date().toLocaleTimeString()}] Посуда обновлена администратором! Синхронизировано на всех устройствах.`);
           return;
         }
         throw new Error('Invalid state structure');
