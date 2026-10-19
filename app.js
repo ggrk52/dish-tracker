@@ -298,41 +298,68 @@ class CelebrationFX {
 const celebration = new CelebrationFX('fx-canvas');
 
 // ========================================================
-// CLOUD SYNCHRONIZATION (Firebase Realtime DB or Local API)
 // ========================================================
+// CLOUD SYNCHRONIZATION (Universal REST / Cloudflare / Firebase / Local)
+// ========================================================
+let cloudPollInterval = null;
+
 async function initCloudSync() {
   const dot = document.querySelector('.cloud-dot');
   const label = document.getElementById('cloud-status-label');
 
-  // Mode 1: Firebase Realtime Database (Global Web Access)
-  if (settings.firebaseUrl && settings.firebaseUrl.trim() !== '') {
-    let cleanUrl = settings.firebaseUrl.trim();
+  if (cloudPollInterval) {
+    clearInterval(cloudPollInterval);
+    cloudPollInterval = null;
+  }
+
+  // Mode 1: Cloud URL (Cloudflare Worker, Custom REST, or Firebase)
+  const cloudUrl = settings.firebaseUrl || settings.cloudUrl;
+  if (cloudUrl && cloudUrl.trim() !== '') {
+    let cleanUrl = cloudUrl.trim();
     if (!cleanUrl.startsWith('http')) cleanUrl = 'https://' + cleanUrl;
     if (cleanUrl.endsWith('/')) cleanUrl = cleanUrl.slice(0, -1);
 
+    const isFirebase = cleanUrl.includes('firebaseio.com');
+    const fetchUrl = isFirebase ? `${cleanUrl}/state.json` : cleanUrl;
+
     try {
       label.textContent = 'Облако (подключение...)';
-      const testRes = await fetch(`${cleanUrl}/state.json`);
+      const testRes = await fetch(fetchUrl);
       if (testRes.ok) {
         const cloudData = await testRes.json();
         if (cloudData && cloudData.queue) {
           state = { ...DEFAULT_STATE, ...cloudData };
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
           renderAll();
-        } else {
-          // Push initial data to cloud
+        } else if (cloudData && cloudData.exists === false) {
           pushStateToCloud();
         }
 
         dot.className = 'cloud-dot cloud-connected';
-        label.textContent = 'В облаке 🟢';
+        label.textContent = 'В сети 🟢';
 
-        // Connect Firebase SSE EventStream for live push!
-        connectFirebaseSSE(cleanUrl);
+        if (isFirebase) {
+          connectFirebaseSSE(cleanUrl);
+        } else {
+          // Generic REST / Cloudflare polling every 20s
+          cloudPollInterval = setInterval(async () => {
+            try {
+              const res = await fetch(fetchUrl);
+              if (res.ok) {
+                const fresh = await res.json();
+                if (fresh && fresh.queue && fresh.dutyStartedAt !== state.dutyStartedAt) {
+                  state = { ...DEFAULT_STATE, ...fresh };
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                  renderAll();
+                }
+              }
+            } catch (e) {}
+          }, 20000);
+        }
         return;
       }
     } catch (e) {
-      console.warn('Firebase connect error:', e);
+      console.warn('Cloud connect error:', e);
     }
   }
 
@@ -355,9 +382,7 @@ async function initCloudSync() {
       connectLocalServerSSE();
       return;
     }
-  } catch (e) {
-    // offline
-  }
+  } catch (e) {}
 
   // Mode 3: Standalone Offline
   dot.className = 'cloud-dot';
@@ -408,21 +433,25 @@ function connectLocalServerSSE() {
 }
 
 async function pushStateToCloud() {
-  // Push to Firebase if configured
-  if (settings.firebaseUrl && settings.firebaseUrl.trim() !== '') {
-    let cleanUrl = settings.firebaseUrl.trim();
+  const cloudUrl = settings.firebaseUrl || settings.cloudUrl;
+  if (cloudUrl && cloudUrl.trim() !== '') {
+    let cleanUrl = cloudUrl.trim();
     if (!cleanUrl.startsWith('http')) cleanUrl = 'https://' + cleanUrl;
     if (cleanUrl.endsWith('/')) cleanUrl = cleanUrl.slice(0, -1);
 
+    const isFirebase = cleanUrl.includes('firebaseio.com');
+    const targetUrl = isFirebase ? `${cleanUrl}/state.json` : cleanUrl;
+    const method = isFirebase ? 'PUT' : 'POST';
+
     try {
-      await fetch(`${cleanUrl}/state.json`, {
-        method: 'PUT',
+      await fetch(targetUrl, {
+        method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(state)
       });
       return;
     } catch (e) {
-      console.warn('Failed to push to Firebase:', e);
+      console.warn('Failed to push to cloud endpoint:', e);
     }
   }
 
