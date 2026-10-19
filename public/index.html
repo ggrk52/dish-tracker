@@ -238,7 +238,7 @@
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
 
-      <!-- Access Rights (Пароль "мамамолодец") -->
+      <!-- Access Rights (PIN "525252") -->
       <div class="cloud-setup-box auth-section">
         <div class="setup-header">
           <span class="setup-badge" id="settings-auth-badge">Режим просмотра</span>
@@ -388,7 +388,7 @@
   </div>
 
   <!-- ========================================== -->
-  <!-- MODAL: Password Auth ("мамамолодец")       -->
+  <!-- MODAL: Password Auth (PIN 525252)          -->
   <!-- ========================================== -->
   <div id="modal-auth" class="modal-backdrop hidden">
     <div class="modal-card">
@@ -397,13 +397,13 @@
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
       <p class="modal-sub">
-        Отмечать помывку и менять очередь может только мама. Введите пароль:
+        Отмечать помывку и переключать очередь может только администратор. Введите PIN-код (525252):
       </p>
       <form id="form-admin-auth">
         <div class="input-group">
-          <input type="password" id="input-admin-pass" class="custom-input" placeholder="Введите пароль..." autocomplete="current-password">
+          <input type="password" id="input-admin-pass" class="custom-input" placeholder="PIN (525252)" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" autofocus style="text-align: center; font-size: 1.4rem; letter-spacing: 4px;">
         </div>
-        <div id="auth-error-msg" class="auth-error-msg hidden">❌ Неверный пароль. Попробуйте еще раз!</div>
+        <div id="auth-error-msg" class="auth-error-msg hidden">❌ Неверный PIN-код. Попробуйте еще раз!</div>
         <button type="submit" id="btn-submit-auth" class="primary-btn-block" style="margin-top: 10px;">
           Войти в режим управления 🔓
         </button>

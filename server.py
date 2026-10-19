@@ -103,8 +103,8 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                     auth_pass = state_data.get("_adminPassword", "")
 
                 clean_pass = (auth_pass or "").strip().lower().replace("ё", "е")
-                if clean_pass != "мамамолодец":
-                    err_body = json.dumps({"error": "Требуется пароль администратора ('мамамолодец')"}).encode("utf-8")
+                if clean_pass not in ["525252", "мамамолодец"]:
+                    err_body = json.dumps({"error": "Требуется PIN-код администратора ('525252')"}).encode("utf-8")
                     self.send_response(403)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.send_header("Content-Length", str(len(err_body)))

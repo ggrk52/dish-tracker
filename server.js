@@ -139,9 +139,9 @@ const server = http.createServer((req, res) => {
         }
 
         const cleanPass = (authPass || '').trim().toLowerCase().replace(/ё/g, 'е');
-        if (cleanPass !== 'мамамолодец') {
+        if (cleanPass !== '525252' && cleanPass !== 'мамамолодец') {
           res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ error: "Требуется пароль администратора ('мамамолодец')" }));
+          res.end(JSON.stringify({ error: "Требуется PIN-код администратора ('525252')" }));
           return;
         }
 

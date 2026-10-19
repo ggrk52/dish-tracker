@@ -44,10 +44,10 @@ let cloudEventSource = null;
 let currentHistoryFilter = 'all';
 
 // ========================================================
-// AUTH & ACCESS RIGHTS (Пароль "мамамолодец")
+// AUTH & ACCESS RIGHTS (Пароль "525252")
 // ========================================================
 const AUTH_STORAGE_KEY = 'dish_tracker_admin_auth';
-const ADMIN_PASSWORD_NORMALIZED = 'мамамолодец';
+const VALID_ADMIN_PASSWORDS = ['525252', 'мамамолодец'];
 
 function getSavedAdminPassword() {
   return localStorage.getItem(AUTH_STORAGE_KEY) || '';
@@ -58,8 +58,13 @@ function normalizePassword(pass) {
   return pass.trim().toLowerCase().replace(/ё/g, 'е');
 }
 
+function isPasswordValid(pass) {
+  const norm = normalizePassword(pass);
+  return VALID_ADMIN_PASSWORDS.includes(norm);
+}
+
 function isAdmin() {
-  return normalizePassword(getSavedAdminPassword()) === ADMIN_PASSWORD_NORMALIZED;
+  return isPasswordValid(getSavedAdminPassword());
 }
 
 let pendingAuthAction = null;
@@ -89,8 +94,8 @@ function handleAuthSubmit() {
   const err = document.getElementById('auth-error-msg');
   const entered = input ? input.value : '';
 
-  if (normalizePassword(entered) === ADMIN_PASSWORD_NORMALIZED) {
-    localStorage.setItem(AUTH_STORAGE_KEY, ADMIN_PASSWORD_NORMALIZED);
+  if (isPasswordValid(entered)) {
+    localStorage.setItem(AUTH_STORAGE_KEY, '525252');
     closeAllModals();
     if (window.soundFx) soundFx.playVictory();
     showToast('👑 Режим управления активирован!', '🎉');
@@ -509,7 +514,7 @@ async function pushStateToCloud() {
   }
   // Always push directly to Master Raspberry Pi server
   try {
-    const adminPass = getSavedAdminPassword() || 'мамамолодец';
+    const adminPass = getSavedAdminPassword() || '525252';
     const payload = {
       ...state,
       _adminPassword: adminPass
@@ -1197,10 +1202,10 @@ function renderAuthStatus() {
     } else {
       settingsBadge.className = 'setup-badge neutral';
       settingsBadge.textContent = '🔒 Только просмотр';
-      settingsDesc.textContent = 'Изменять статус и очередь может только мама с паролем (мамамолодец).';
+      settingsDesc.textContent = 'Изменять статус и очередь может только администратор с PIN-кодом (525252).';
       settingsActions.innerHTML = `
         <button type="button" class="primary-action-btn" onclick="closeAllModals(); openAuthModal();">
-          Ввести пароль (мамамолодец) 🔑
+          Ввести PIN-код (525252) 🔑
         </button>
       `;
     }
