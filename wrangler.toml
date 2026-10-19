@@ -1,0 +1,13 @@
+name = "dish-tracker"
+compatibility_date = "2024-01-01"
+
+# Для Cloudflare Pages
+pages_build_output_dir = "."
+
+# Для автономного воркера (если деплоить как Worker)
+main = "cloudflare-worker.js"
+
+# Привязка KV хранилища (создается в панели Cloudflare)
+# [[kv_namespaces]]
+# binding = "DISH_KV"
+# id = "ваш_id_из_панели_cloudflare"
