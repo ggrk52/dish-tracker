@@ -4,10 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-# Если имя пользователя на Raspberry Pi отличается от pi, измените User и WorkingDirectory
-User=pi
-WorkingDirectory=/home/pi/dish-tracker
-ExecStart=/usr/bin/env node server.js
+User=ggrk52
+WorkingDirectory=/home/ggrk52/dish-tracker
+ExecStart=/usr/bin/python3 /home/ggrk52/dish-tracker/server.py
 Restart=always
 RestartSec=3
 Environment=PORT=8080
