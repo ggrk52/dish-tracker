@@ -1,3 +1,7 @@
 name = "dish-tracker"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "."
+
+[[kv_namespaces]]
+binding = "DISH_KV"
+id = "da4086483ce54d50b64a62241d510abe"
