@@ -98,7 +98,7 @@ function handleAuthSubmit() {
     localStorage.setItem(AUTH_STORAGE_KEY, '525252');
     closeAllModals();
     if (window.soundFx) soundFx.playVictory();
-    showToast('👑 Режим управления активирован!', '🎉');
+    showToast('👑 Режим управления активирован (Серёжа)!', '🎉');
     renderAuthStatus();
 
     if (typeof pendingAuthAction === 'function') {
@@ -1142,11 +1142,11 @@ function renderAuthStatus() {
     if (admin) {
       authBadge.classList.add('is-admin');
       authIcon.textContent = '👑';
-      authBadge.title = '👑 Вы в режиме управления (Мама). Нажмите, чтобы выйти';
+      authBadge.title = '👑 Вы в режиме управления (Серёжа). Нажмите, чтобы выйти';
     } else {
       authBadge.classList.remove('is-admin');
       authIcon.textContent = '🔒';
-      authBadge.title = '🔒 Режим просмотра. Нажмите, чтобы войти с паролем';
+      authBadge.title = '🔒 Режим просмотра. Нажмите, чтобы войти с PIN-кодом';
     }
   }
 
@@ -1179,7 +1179,7 @@ function renderAuthStatus() {
         <span class="wash-icon">🔒</span>
         <div class="wash-label-box">
           <span class="wash-title">РЕЖИМ ПРОСМОТРА</span>
-          <span class="wash-sub">Нажмите, чтобы ввести пароль 🔑</span>
+          <span class="wash-sub">Нажмите, чтобы ввести PIN 🔑</span>
         </div>
       `;
     }
@@ -1192,8 +1192,8 @@ function renderAuthStatus() {
   if (settingsBadge && settingsDesc && settingsActions) {
     if (admin) {
       settingsBadge.className = 'setup-badge';
-      settingsBadge.textContent = '👑 Режим управления';
-      settingsDesc.textContent = 'Этот телефон авторизован. Вы можете отмечать помывку и менять порядок очереди.';
+      settingsBadge.textContent = '👑 Режим управления (Серёжа)';
+      settingsDesc.textContent = 'Этот телефон авторизован. Серёжа может отмечать помывку и менять порядок очереди.';
       settingsActions.innerHTML = `
         <button type="button" class="secondary-action-btn" onclick="logoutAdmin(); closeAllModals();">
           Выйти из режима управления
@@ -1202,7 +1202,7 @@ function renderAuthStatus() {
     } else {
       settingsBadge.className = 'setup-badge neutral';
       settingsBadge.textContent = '🔒 Только просмотр';
-      settingsDesc.textContent = 'Изменять статус и очередь может только администратор с PIN-кодом (525252).';
+      settingsDesc.textContent = 'Изменять статус и очередь может только Серёжа с PIN-кодом (525252).';
       settingsActions.innerHTML = `
         <button type="button" class="primary-action-btn" onclick="closeAllModals(); openAuthModal();">
           Ввести PIN-код (525252) 🔑
@@ -1449,7 +1449,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnAuthBadge) {
     btnAuthBadge.addEventListener('click', () => {
       if (isAdmin()) {
-        if (confirm('Вы авторизованы как администратор (Мама).\n\nВыйти из режима управления на этом телефоне?')) {
+        if (confirm('Вы авторизованы как администратор (Серёжа).\n\nВыйти из режима управления на этом телефоне?')) {
           logoutAdmin();
         }
       } else {
