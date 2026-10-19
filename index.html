@@ -223,7 +223,7 @@
     <div class="modal-card">
       <div class="modal-head">
         <h3>⚙️ Настройки и Сервер</h3>
-        <button class="modal-close-btn">&times;</button>
+        <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
 
       <!-- Server & Local Network -->
@@ -253,6 +253,7 @@
             <button id="btn-save-cloud" class="primary-action-btn">Сохранить</button>
           </div>
         </div>
+        <button id="btn-cloud-guide" class="text-link-btn" style="background:none;border:none;color:var(--primary);cursor:pointer;font-size:0.85rem;margin-top:8px;padding:0;text-decoration:underline;text-align:left;">📖 Инструкция по облаку (Firebase/Vercel)</button>
       </div>
 
       <!-- Backup & Restore -->
@@ -285,7 +286,7 @@
     <div class="modal-card">
       <div class="modal-head">
         <h3>🔄 Поменяться дежурством</h3>
-        <button class="modal-close-btn">&times;</button>
+        <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
       <p class="modal-sub">Кто сегодня помоет вместо текущего дежурного?</p>
       <div class="swap-grid" id="swap-member-list">
@@ -299,7 +300,7 @@
     <div class="modal-card">
       <div class="modal-head">
         <h3>📝 Отметить помывку с заметкой</h3>
-        <button class="modal-close-btn">&times;</button>
+        <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
       <div class="quick-tags-container">
         <button class="note-tag-btn" data-tag="Гора кастрюль и сковородок 🍳">Гора посуды 🍳</button>
@@ -318,7 +319,7 @@
     <div class="modal-card">
       <div class="modal-head">
         <h3>📋 Порядок очереди</h3>
-        <button class="modal-close-btn">&times;</button>
+        <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
       <p class="modal-sub">Настройте очередность стрелочками:</p>
       <div class="reorder-rows-list" id="reorder-rows-container">
@@ -333,7 +334,7 @@
     <div class="modal-card guide-card">
       <div class="modal-head">
         <h3>🚀 Как выложить в интернет (2 простых шага)</h3>
-        <button class="modal-close-btn">&times;</button>
+        <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
       <div class="guide-content">
         <div class="guide-step">
@@ -356,7 +357,7 @@
           </p>
         </div>
       </div>
-      <button class="primary-btn-block modal-close-btn">Понятно, спасибо!</button>
+      <button type="button" class="primary-btn-block modal-close-btn" onclick="closeAllModals()">Понятно, спасибо!</button>
     </div>
   </div>
 

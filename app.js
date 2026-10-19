@@ -179,6 +179,7 @@ class SoundEngine {
 }
 
 const soundFx = new SoundEngine();
+window.soundFx = soundFx;
 
 // ========================================================
 // CELEBRATION FX (Confetti & Soap Bubbles)
@@ -1002,12 +1003,51 @@ function hideUndoToast() {
 // MODAL CONTROLS
 // ========================================================
 function openModal(id) {
-  document.getElementById(id).classList.remove('hidden');
+  const modal = document.getElementById(id);
+  if (modal) {
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
 }
 
 function closeAllModals() {
-  document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.add('hidden'));
+  document.querySelectorAll('.modal-backdrop').forEach(m => {
+    m.classList.add('hidden');
+  });
+  document.body.style.overflow = '';
 }
+
+// Expose globally so inline onclick="closeAllModals()" always works
+window.openModal = openModal;
+window.closeAllModals = closeAllModals;
+
+// Delegated click handler on document for closing modals
+document.addEventListener('click', (e) => {
+  const closeBtn = e.target.closest('.modal-close-btn');
+  if (closeBtn) {
+    e.preventDefault();
+    closeAllModals();
+    if (window.soundFx && typeof window.soundFx.playClick === 'function') {
+      window.soundFx.playClick();
+    }
+    return;
+  }
+
+  if (e.target.classList.contains('modal-backdrop')) {
+    e.preventDefault();
+    closeAllModals();
+    if (window.soundFx && typeof window.soundFx.playClick === 'function') {
+      window.soundFx.playClick();
+    }
+  }
+});
+
+// Escape key to close any modal
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' || e.key === 'Esc') {
+    closeAllModals();
+  }
+});
 
 function openSwapModal() {
   const current = getCurrentDutyMember();
@@ -1244,48 +1284,75 @@ document.addEventListener('DOMContentLoaded', () => {
   const inputFirebase = document.getElementById('input-firebase-url');
   if (inputFirebase) inputFirebase.value = settings.firebaseUrl || '';
 
-  document.getElementById('btn-save-cloud').addEventListener('click', () => {
-    settings.firebaseUrl = inputFirebase.value.trim();
-    saveSettings();
-    soundFx.playVictory();
-    alert('Настройки облака сохранены! Подключаемся...');
-    initCloudSync();
-  });
+  const btnSaveCloud = document.getElementById('btn-save-cloud');
+  if (btnSaveCloud) {
+    btnSaveCloud.addEventListener('click', () => {
+      if (inputFirebase) {
+        settings.firebaseUrl = inputFirebase.value.trim();
+        saveSettings();
+        soundFx.playVictory();
+        alert('Настройки облака сохранены! Подключаемся...');
+        initCloudSync();
+      }
+    });
+  }
 
   // Cloud guide modal
-  document.getElementById('btn-cloud-guide').addEventListener('click', () => {
-    openModal('modal-cloud-guide');
-  });
+  const btnCloudGuide = document.getElementById('btn-cloud-guide');
+  if (btnCloudGuide) {
+    btnCloudGuide.addEventListener('click', () => {
+      openModal('modal-cloud-guide');
+    });
+  }
 
   // Copy local IP
-  document.getElementById('btn-copy-local-ip').addEventListener('click', () => {
-    const code = document.getElementById('local-ip-code').textContent;
-    navigator.clipboard.writeText(code).then(() => {
-      soundFx.playPop();
-      alert('Адрес скопирован в буфер обмена!');
+  const btnCopyLocalIp = document.getElementById('btn-copy-local-ip');
+  if (btnCopyLocalIp) {
+    btnCopyLocalIp.addEventListener('click', () => {
+      const codeEl = document.getElementById('local-ip-code');
+      const code = codeEl ? codeEl.textContent : 'http://192.168.1.75:8080';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(() => {
+          soundFx.playPop();
+          alert('Адрес скопирован в буфер обмена!');
+        }).catch(() => {
+          alert('Адрес: ' + code);
+        });
+      } else {
+        alert('Адрес: ' + code);
+      }
     });
-  });
+  }
 
   // Backup handlers
-  document.getElementById('btn-export-backup').addEventListener('click', exportBackupJSON);
-  document.getElementById('btn-import-backup').addEventListener('click', () => {
-    document.getElementById('file-import-input').click();
-  });
-  document.getElementById('file-import-input').addEventListener('change', handleImportJSON);
+  const btnExportBackup = document.getElementById('btn-export-backup');
+  if (btnExportBackup) btnExportBackup.addEventListener('click', exportBackupJSON);
+
+  const btnImportBackup = document.getElementById('btn-import-backup');
+  const fileImportInput = document.getElementById('file-import-input');
+  if (btnImportBackup && fileImportInput) {
+    btnImportBackup.addEventListener('click', () => {
+      fileImportInput.click();
+    });
+    fileImportInput.addEventListener('change', handleImportJSON);
+  }
 
   // Reset data handler
-  document.getElementById('btn-reset-data').addEventListener('click', () => {
-    if (confirm('ВНИМАНИЕ: Вы уверены, что хотите сбросить всю историю и статистику мытья посуды?')) {
-      state.history = [];
-      state.stats = { mama: 0, papa: 0, serezha: 0, vasya: 0 };
-      saveState();
-      renderAll();
-      soundFx.playClick();
-      alert('Данные сброшены.');
-    }
-  });
+  const btnResetData = document.getElementById('btn-reset-data');
+  if (btnResetData) {
+    btnResetData.addEventListener('click', () => {
+      if (confirm('ВНИМАНИЕ: Вы уверены, что хотите сбросить всю историю и статистику мытья посуды?')) {
+        state.history = [];
+        state.stats = { mama: 0, papa: 0, serezha: 0, vasya: 0 };
+        saveState();
+        renderAll();
+        soundFx.playClick();
+        alert('Данные сброшены.');
+      }
+    });
+  }
 
-  // Close modals
+  // Direct modal close bindings
   document.querySelectorAll('.modal-close-btn').forEach(btn => {
     btn.addEventListener('click', closeAllModals);
   });
