@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: dish-tracker
+    env: node
+    plan: free
+    buildCommand: ""
+    startCommand: "node server.js"
+    envVars:
+      - key: PORT
+        value: 8080

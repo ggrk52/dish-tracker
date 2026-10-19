@@ -1,0 +1,279 @@
+{
+  "members": {
+    "mama": {
+      "id": "mama",
+      "name": "Мама",
+      "role": "Мама",
+      "avatar": "👩",
+      "color": "#ec4899",
+      "title": "Хранительница очага"
+    },
+    "papa": {
+      "id": "papa",
+      "name": "Папа",
+      "role": "Папа",
+      "avatar": "👨",
+      "color": "#0284c7",
+      "title": "Гроза сковородок"
+    },
+    "serezha": {
+      "id": "serezha",
+      "name": "Серёжа",
+      "role": "Сын",
+      "avatar": "👦",
+      "color": "#10b981",
+      "title": "Мастер мыльной пены"
+    },
+    "vasya": {
+      "id": "vasya",
+      "name": "Вася",
+      "role": "Сын",
+      "avatar": "🧒",
+      "color": "#f59e0b",
+      "title": "Повелитель тарелок"
+    }
+  },
+  "queue": [
+    "mama",
+    "papa",
+    "serezha",
+    "vasya"
+  ],
+  "currentQueueIndex": 1,
+  "dutyStartedAt": 1792431561194,
+  "stats": {
+    "mama": 10,
+    "papa": 9,
+    "serezha": 9,
+    "vasya": 9
+  },
+  "history": [
+    {
+      "id": 1792431561194,
+      "memberId": "mama",
+      "timestamp": 1792431561194,
+      "note": "Быстро сполоснул чашки ☕"
+    },
+    {
+      "id": 1792431556294,
+      "memberId": "vasya",
+      "timestamp": 1792431556294,
+      "note": ""
+    },
+    {
+      "id": 1792431551977,
+      "memberId": "serezha",
+      "timestamp": 1792431551977,
+      "note": ""
+    },
+    {
+      "id": 1792431216901,
+      "memberId": "papa",
+      "timestamp": 1792431216901,
+      "note": ""
+    },
+    {
+      "id": 1792431216785,
+      "memberId": "mama",
+      "timestamp": 1792431216785,
+      "note": ""
+    },
+    {
+      "id": 1792431216651,
+      "memberId": "vasya",
+      "timestamp": 1792431216651,
+      "note": ""
+    },
+    {
+      "id": 1792431216534,
+      "memberId": "serezha",
+      "timestamp": 1792431216534,
+      "note": ""
+    },
+    {
+      "id": 1792431216418,
+      "memberId": "papa",
+      "timestamp": 1792431216418,
+      "note": ""
+    },
+    {
+      "id": 1792431216268,
+      "memberId": "mama",
+      "timestamp": 1792431216268,
+      "note": ""
+    },
+    {
+      "id": 1792431216151,
+      "memberId": "vasya",
+      "timestamp": 1792431216151,
+      "note": ""
+    },
+    {
+      "id": 1792431216034,
+      "memberId": "serezha",
+      "timestamp": 1792431216034,
+      "note": ""
+    },
+    {
+      "id": 1792431215901,
+      "memberId": "papa",
+      "timestamp": 1792431215901,
+      "note": ""
+    },
+    {
+      "id": 1792431215784,
+      "memberId": "mama",
+      "timestamp": 1792431215784,
+      "note": ""
+    },
+    {
+      "id": 1792431215651,
+      "memberId": "vasya",
+      "timestamp": 1792431215651,
+      "note": ""
+    },
+    {
+      "id": 1792431215534,
+      "memberId": "serezha",
+      "timestamp": 1792431215534,
+      "note": ""
+    },
+    {
+      "id": 1792431215401,
+      "memberId": "papa",
+      "timestamp": 1792431215401,
+      "note": ""
+    },
+    {
+      "id": 1792431215151,
+      "memberId": "mama",
+      "timestamp": 1792431215151,
+      "note": ""
+    },
+    {
+      "id": 1792431215001,
+      "memberId": "vasya",
+      "timestamp": 1792431215001,
+      "note": ""
+    },
+    {
+      "id": 1792431214668,
+      "memberId": "serezha",
+      "timestamp": 1792431214668,
+      "note": ""
+    },
+    {
+      "id": 1792431213735,
+      "memberId": "papa",
+      "timestamp": 1792431213735,
+      "note": ""
+    },
+    {
+      "id": 1792431213601,
+      "memberId": "mama",
+      "timestamp": 1792431213601,
+      "note": ""
+    },
+    {
+      "id": 1792431213484,
+      "memberId": "vasya",
+      "timestamp": 1792431213484,
+      "note": ""
+    },
+    {
+      "id": 1792431213368,
+      "memberId": "serezha",
+      "timestamp": 1792431213368,
+      "note": ""
+    },
+    {
+      "id": 1792431213268,
+      "memberId": "papa",
+      "timestamp": 1792431213268,
+      "note": ""
+    },
+    {
+      "id": 1792431213168,
+      "memberId": "mama",
+      "timestamp": 1792431213168,
+      "note": ""
+    },
+    {
+      "id": 1792431213068,
+      "memberId": "vasya",
+      "timestamp": 1792431213068,
+      "note": ""
+    },
+    {
+      "id": 1792431212951,
+      "memberId": "serezha",
+      "timestamp": 1792431212951,
+      "note": ""
+    },
+    {
+      "id": 1792431212751,
+      "memberId": "papa",
+      "timestamp": 1792431212751,
+      "note": ""
+    },
+    {
+      "id": 1792431212534,
+      "memberId": "mama",
+      "timestamp": 1792431212534,
+      "note": ""
+    },
+    {
+      "id": 1792431212384,
+      "memberId": "vasya",
+      "timestamp": 1792431212384,
+      "note": ""
+    },
+    {
+      "id": 1792431212234,
+      "memberId": "serezha",
+      "timestamp": 1792431212234,
+      "note": ""
+    },
+    {
+      "id": 1792431212068,
+      "memberId": "papa",
+      "timestamp": 1792431212068,
+      "note": ""
+    },
+    {
+      "id": 1792431211868,
+      "memberId": "mama",
+      "timestamp": 1792431211868,
+      "note": ""
+    },
+    {
+      "id": 1792431211618,
+      "memberId": "vasya",
+      "timestamp": 1792431211618,
+      "note": ""
+    },
+    {
+      "id": 1792431211134,
+      "memberId": "serezha",
+      "timestamp": 1792431211134,
+      "note": ""
+    },
+    {
+      "id": 1792431210384,
+      "memberId": "papa",
+      "timestamp": 1792431210384,
+      "note": ""
+    },
+    {
+      "id": 1792431208568,
+      "memberId": "mama",
+      "timestamp": 1792431208568,
+      "note": ""
+    }
+  ],
+  "settings": {
+    "sound": true,
+    "theme": "dark",
+    "wakeLock": false
+  }
+}

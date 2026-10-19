@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Чистая Тарелка — График мытья посуды</title>
+  
+  <!-- PWA & Mobile Meta Tags -->
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Посуда">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Canvas for celebration confetti & bubbles -->
+  <canvas id="fx-canvas"></canvas>
+
+  <div class="app-layout">
+    <!-- Top Navigation Bar -->
+    <header class="top-nav">
+      <div class="brand">
+        <span class="brand-icon">🍽️</span>
+        <div>
+          <h1 class="brand-title">Чистая Тарелка</h1>
+          <div class="cloud-indicator" id="cloud-indicator">
+            <span class="cloud-dot"></span>
+            <span class="cloud-status-label" id="cloud-status-label">Локально</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="top-actions">
+        <button id="btn-sound" class="nav-icon-btn" title="Звуки" aria-label="Звуки">
+          <span class="btn-icon">🔊</span>
+        </button>
+        <button id="btn-wake" class="nav-icon-btn" title="Не гасить экран на кухне" aria-label="Не гасить экран">
+          <span class="btn-icon">💡</span>
+        </button>
+        <button id="btn-theme" class="nav-icon-btn" title="Сменить тему" aria-label="Сменить тему">
+          <span class="btn-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Undo Toast Notification -->
+    <div id="undo-toast" class="undo-toast hidden">
+      <div class="toast-content">
+        <span class="toast-icon">🧼</span>
+        <span id="undo-text" class="toast-text">Посуда засчитана!</span>
+      </div>
+      <button id="btn-undo" class="toast-undo-btn">Отменить</button>
+    </div>
+
+    <!-- MAIN APP CONTENT (Tab Views) -->
+    <main class="main-content">
+      
+      <!-- ========================================== -->
+      <!-- TAB 1: DUTY / ДЕЖУРСТВО                    -->
+      <!-- ========================================== -->
+      <section id="tab-duty" class="tab-view active">
+        <!-- Main Hero Card: Current Duty -->
+        <div class="duty-hero-card" id="duty-hero">
+          <div class="duty-status-badge">
+            <span class="pulsing-circle"></span>
+            <span>СЕЙЧАС ДЕЖУРНЫЙ</span>
+          </div>
+
+          <div class="duty-avatar-box">
+            <div class="avatar-aura" id="hero-aura"></div>
+            <div class="hero-avatar" id="hero-avatar">👩</div>
+          </div>
+          
+          <h2 class="duty-person-name" id="hero-name">Мама</h2>
+          <div class="duty-meta" id="hero-meta">
+            <span class="meta-tag" id="hero-timer">Дежурит 15 мин.</span>
+            <span class="meta-tag streak-tag" id="hero-streak">Помыто всего: 0</span>
+          </div>
+
+          <!-- The Big Wash Button -->
+          <button id="btn-wash-done" class="btn-wash-main">
+            <div class="wash-btn-shine"></div>
+            <span class="wash-icon">🧼</span>
+            <div class="wash-label-box">
+              <span class="wash-title">Я ПОМЫЛ ПОСУДУ!</span>
+              <span class="wash-sub">Передать очередь дальше ✨</span>
+            </div>
+          </button>
+
+          <!-- Quick Turn Modifiers -->
+          <div class="hero-quick-row">
+            <button id="btn-swap-duty" class="quick-btn">
+              <span>🔄</span> Поменяться
+            </button>
+            <button id="btn-skip-duty" class="quick-btn">
+              <span>⏩</span> Пропустить
+            </button>
+            <button id="btn-add-note" class="quick-btn">
+              <span>📝</span> С заметкой
+            </button>
+          </div>
+        </div>
+
+        <!-- Upcoming Queue Card -->
+        <div class="content-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="title-icon">📋</span>
+              <span>Очередь помывки</span>
+            </div>
+            <button id="btn-reorder-queue" class="pill-btn">Изменить порядок</button>
+          </div>
+
+          <div class="queue-track" id="queue-track">
+            <!-- Dynamically rendered queue items -->
+          </div>
+        </div>
+
+        <!-- Recent Activity Glance -->
+        <div class="content-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="title-icon">⚡</span>
+              <span>Последняя активность</span>
+            </div>
+            <button id="btn-view-all-history" class="pill-btn">Вся история →</button>
+          </div>
+          <div id="recent-glance-box" class="recent-glance-box">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- TAB 2: HISTORY / ИСТОРИЯ                   -->
+      <!-- ========================================== -->
+      <section id="tab-history" class="tab-view">
+        <div class="content-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title-large">📜 История дежурств</h2>
+              <p class="card-subtitle">Полный журнал с датами, заметками и похвалой</p>
+            </div>
+            <button id="btn-export-history" class="pill-btn" title="Экспорт в CSV">📥 Скачать</button>
+          </div>
+
+          <!-- History Filters -->
+          <div class="history-filter-bar">
+            <button class="filter-chip active" data-filter="all">Все (0)</button>
+            <button class="filter-chip" data-filter="mama">👩 Мама</button>
+            <button class="filter-chip" data-filter="papa">👨 Папа</button>
+            <button class="filter-chip" data-filter="serezha">👦 Серёжа</button>
+            <button class="filter-chip" data-filter="vasya">🧒 Вася</button>
+          </div>
+
+          <!-- Timeline Container -->
+          <div class="history-timeline" id="history-timeline">
+            <!-- Dynamically populated with grouped dates -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- TAB 3: STATS / СТАТИСТИКА                  -->
+      <!-- ========================================== -->
+      <section id="tab-stats" class="tab-view">
+        <div class="content-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title-large">🏆 Доска почёта</h2>
+              <p class="card-subtitle">Кто в нашей семье чаще всех моет посуду</p>
+            </div>
+            <span class="stats-badge-total" id="stat-total-badge">Всего: 0 моек</span>
+          </div>
+
+          <div class="leaderboard-cards" id="leaderboard-list">
+            <!-- Dynamic Leaderboard Cards -->
+          </div>
+        </div>
+
+        <!-- Fun Awards Card -->
+        <div class="content-card">
+          <h3 class="card-title">
+            <span class="title-icon">🎖️</span>
+            <span>Семейные награды</span>
+          </h3>
+          <div class="awards-grid" id="awards-grid">
+            <!-- Dynamic awards -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- TAB 4: CLOUD & SETTINGS / ОБЛАКО           -->
+      <!-- ========================================== -->
+      <section id="tab-settings" class="tab-view">
+        <!-- Cloud Sync Card -->
+        <div class="content-card highlight-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="title-icon">☁️</span>
+              <span>Доступ из интернета и Синхронизация</span>
+            </div>
+          </div>
+          
+          <p class="card-desc">
+            Чтобы приложение открывалось у всех членов семьи <b>через интернет (LTE / 4G / где угодно)</b> без необходимости запускать локальный сервер на компьютере:
+          </p>
+
+          <div class="cloud-modes">
+            <!-- Firebase / Web DB mode -->
+            <div class="cloud-setup-box">
+              <div class="setup-header">
+                <span class="setup-badge">Рекомендуется • 100% Бесплатно</span>
+                <span class="setup-title">Облачная база (Firebase Realtime DB)</span>
+              </div>
+              <p class="setup-text">
+                Данные сохраняются в облаке Google и синхронизируются мгновенно между всеми айфонами и смартфонами.
+              </p>
+              
+              <div class="input-group">
+                <label for="input-firebase-url">URL вашей базы Firebase (или ID комнаты):</label>
+                <div class="input-with-btn">
+                  <input type="text" id="input-firebase-url" placeholder="https://ваш-проект.firebaseio.com">
+                  <button id="btn-save-cloud" class="primary-action-btn">Сохранить</button>
+                </div>
+              </div>
+
+              <button id="btn-cloud-guide" class="text-link-btn">
+                📖 Инструкция за 2 минуты: как создать бесплатную базу и выложить на Vercel / GitHub
+              </button>
+            </div>
+
+            <!-- Local Network Mode -->
+            <div class="cloud-setup-box secondary">
+              <div class="setup-header">
+                <span class="setup-badge neutral">Домашняя сеть</span>
+                <span class="setup-title">Локальный сервер Wi-Fi</span>
+              </div>
+              <p class="setup-text">
+                Для работы только внутри дома через домашний Wi-Fi:
+              </p>
+              <div class="local-ip-badge">
+                <code id="local-ip-code">http://192.168.1.73:8080</code>
+                <button id="btn-copy-local-ip" class="copy-small-btn">Копировать</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Backup & Data Management -->
+        <div class="content-card">
+          <h3 class="card-title">
+            <span class="title-icon">💾</span>
+            <span>Резервная копия данных</span>
+          </h3>
+          <p class="card-desc">
+            Вся история и статистика сохраняются надёжно. Вы всегда можете сохранить архив или перенести данные на другой телефон.
+          </p>
+          <div class="action-buttons-row">
+            <button id="btn-export-backup" class="secondary-action-btn">
+              <span>📥</span> Скачать резервную копию (JSON)
+            </button>
+            <button id="btn-import-backup" class="secondary-action-btn">
+              <span>📤</span> Восстановить из файла
+            </button>
+            <input type="file" id="file-import-input" accept=".json" style="display: none;">
+          </div>
+          <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 14px;">
+            <button id="btn-reset-data" class="danger-text-btn">Сбросить все данные...</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar (iOS App Style) -->
+    <nav class="bottom-tab-bar">
+      <button class="tab-item active" data-tab="tab-duty">
+        <span class="tab-icon">🧼</span>
+        <span class="tab-label">Дежурство</span>
+      </button>
+      <button class="tab-item" data-tab="tab-history">
+        <span class="tab-icon">📜</span>
+        <span class="tab-label">История</span>
+      </button>
+      <button class="tab-item" data-tab="tab-stats">
+        <span class="tab-icon">🏆</span>
+        <span class="tab-label">Почёт</span>
+      </button>
+      <button class="tab-item" data-tab="tab-settings">
+        <span class="tab-icon">☁️</span>
+        <span class="tab-label">Облако</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODALS                                     -->
+  <!-- ========================================== -->
+
+  <!-- MODAL: Swap Turn -->
+  <div id="modal-swap" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>🔄 Поменяться дежурством</h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <p class="modal-sub">Кто сегодня помоет вместо текущего дежурного?</p>
+      <div class="swap-grid" id="swap-member-list">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Add Wash Note -->
+  <div id="modal-note" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>📝 Отметить помывку с заметкой</h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="quick-tags-container">
+        <button class="note-tag-btn" data-tag="Гора кастрюль и сковородок 🍳">Гора посуды 🍳</button>
+        <button class="note-tag-btn" data-tag="Блестит до скрипа ✨">Блестит до скрипа ✨</button>
+        <button class="note-tag-btn" data-tag="После праздничного обеда 🍰">После праздника 🍰</button>
+        <button class="note-tag-btn" data-tag="Только чашки и тарелки ☕">Только чашки ☕</button>
+        <button class="note-tag-btn" data-tag="Помыл(а) без напоминаний! 🌟">Без напоминаний 🌟</button>
+      </div>
+      <textarea id="modal-note-text" class="custom-textarea" rows="3" placeholder="Что было помыто или комментарий..."></textarea>
+      <button id="btn-submit-note-wash" class="primary-btn-block">Помыто! Засчитать 🧼</button>
+    </div>
+  </div>
+
+  <!-- MODAL: Reorder Queue -->
+  <div id="modal-reorder" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>📋 Порядок очереди</h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <p class="modal-sub">Настройте очередность стрелочками:</p>
+      <div class="reorder-rows-list" id="reorder-rows-container">
+        <!-- Rendered by JS -->
+      </div>
+      <button id="btn-save-reorder-modal" class="primary-btn-block">Сохранить порядок</button>
+    </div>
+  </div>
+
+  <!-- MODAL: Cloud Hosting Guide -->
+  <div id="modal-cloud-guide" class="modal-backdrop hidden">
+    <div class="modal-card guide-card">
+      <div class="modal-head">
+        <h3>🚀 Как выложить в интернет (2 простых шага)</h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="guide-content">
+        <div class="guide-step">
+          <div class="step-badge">Шаг 1</div>
+          <h4>Бесплатная база данных (Firebase)</h4>
+          <ol>
+            <li>Зайдите на <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> под своим Google-аккаунтом.</li>
+            <li>Нажмите <b>«Создать проект»</b> (назовите, например, <i>dish-tracker</i>).</li>
+            <li>В меню слева выберите <b>«Realtime Database»</b> ➔ <b>«Создать базу данных»</b>.</li>
+            <li>Во вкладке <b>«Правила»</b> (Rules) разрешите чтение и запись (укажите <code>".read": true, ".write": true</code>).</li>
+            <li>Скопируйте адрес вашей базы (он выглядит так: <code>https://ваша-база-default-rtdb.firebaseio.com</code>) и вставьте его во вкладку <b>«Облако»</b> в этом приложении!</li>
+          </ol>
+        </div>
+
+        <div class="guide-step">
+          <div class="step-badge">Шаг 2</div>
+          <h4>Бесплатный хостинг приложения (Vercel или GitHub Pages)</h4>
+          <p>
+            Папка с файлами уже полностью готова к загрузке на <a href="https://vercel.com" target="_blank">Vercel.com</a> или GitHub Pages. Вы просто перетаскиваете папку на Vercel — и получаете красивый интернет-адрес (например, <code>https://posuda-semya.vercel.app</code>), доступный всем родным круглосуточно с любого телефона!
+          </p>
+        </div>
+      </div>
+      <button class="primary-btn-block modal-close-btn">Понятно, спасибо!</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
