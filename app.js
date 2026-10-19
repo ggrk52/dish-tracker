@@ -298,172 +298,163 @@ class CelebrationFX {
 const celebration = new CelebrationFX('fx-canvas');
 
 // ========================================================
+// SYNCHRONIZATION ENGINE (Master Raspberry Pi Server + SSE + Fast Polling)
 // ========================================================
-// CLOUD SYNCHRONIZATION (Universal REST / Cloudflare / Firebase / Local)
-// ========================================================
-let cloudPollInterval = null;
+let serverPollInterval = null;
 
 async function initCloudSync() {
   const dot = document.querySelector('.cloud-dot');
   const label = document.getElementById('cloud-status-label');
 
-  if (cloudPollInterval) {
-    clearInterval(cloudPollInterval);
-    cloudPollInterval = null;
-  }
-
-  // Mode 1: Cloud URL (Cloudflare Worker, Custom REST, or Firebase)
-  const cloudUrl = settings.firebaseUrl || settings.cloudUrl;
-  if (cloudUrl && cloudUrl.trim() !== '') {
-    let cleanUrl = cloudUrl.trim();
-    if (!cleanUrl.startsWith('http')) cleanUrl = 'https://' + cleanUrl;
-    if (cleanUrl.endsWith('/')) cleanUrl = cleanUrl.slice(0, -1);
-
-    const isFirebase = cleanUrl.includes('firebaseio.com');
-    const fetchUrl = isFirebase ? `${cleanUrl}/state.json` : cleanUrl;
-
-    try {
-      label.textContent = 'Облако (подключение...)';
-      const testRes = await fetch(fetchUrl);
-      if (testRes.ok) {
-        const cloudData = await testRes.json();
-        if (cloudData && cloudData.queue) {
-          state = { ...DEFAULT_STATE, ...cloudData };
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-          renderAll();
-        } else if (cloudData && cloudData.exists === false) {
-          pushStateToCloud();
-        }
-
-        dot.className = 'cloud-dot cloud-connected';
-        label.textContent = 'В сети 🟢';
-
-        if (isFirebase) {
-          connectFirebaseSSE(cleanUrl);
-        } else {
-          // Generic REST / Cloudflare polling every 20s
-          cloudPollInterval = setInterval(async () => {
-            try {
-              const res = await fetch(fetchUrl);
-              if (res.ok) {
-                const fresh = await res.json();
-                if (fresh && fresh.queue && fresh.dutyStartedAt !== state.dutyStartedAt) {
-                  state = { ...DEFAULT_STATE, ...fresh };
-                  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-                  renderAll();
-                }
-              }
-            } catch (e) {}
-          }, 20000);
-        }
-        return;
-      }
-    } catch (e) {
-      console.warn('Cloud connect error:', e);
-    }
-  }
-
-  // Mode 2: Local Wi-Fi Node Server (if running)
+  // Try connecting to Master Server (/api/state)
   try {
-    const localRes = await fetch('/api/state');
+    const localRes = await fetch('/api/state', { cache: 'no-store' });
     if (localRes.ok) {
       const data = await localRes.json();
-      dot.className = 'cloud-dot local-connected';
-      label.textContent = 'Wi-Fi сеть 🔵';
+      const serverState = (data && data.state) ? data.state : data;
 
-      if (data.exists && data.state) {
-        state = { ...DEFAULT_STATE, ...data.state };
+      if (serverState && serverState.queue && Array.isArray(serverState.queue)) {
+        state = { ...DEFAULT_STATE, ...serverState };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         renderAll();
-      } else {
-        pushStateToCloud();
+
+        if (dot) dot.className = 'cloud-dot local-connected';
+        if (label) label.textContent = 'Сервер онлайн 🟢';
+
+        connectLocalServerSSE();
+        startServerPolling();
+        return;
       }
-
-      connectLocalServerSSE();
-      return;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Server fetch error:', e);
+  }
 
-  // Mode 3: Standalone Offline
-  dot.className = 'cloud-dot';
-  label.textContent = 'Автономно';
+  // Fallback to offline
+  if (dot) dot.className = 'cloud-dot';
+  if (label) label.textContent = 'Офлайн (локально)';
 }
 
-function connectFirebaseSSE(baseUrl) {
-  if (cloudEventSource) cloudEventSource.close();
-  try {
-    cloudEventSource = new EventSource(`${baseUrl}/state.json`);
-    cloudEventSource.addEventListener('put', (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        if (payload.data && payload.data.queue) {
-          state = { ...DEFAULT_STATE, ...payload.data };
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-          renderAll();
-        }
-      } catch (err) {
-        console.error('Firebase SSE error:', err);
-      }
-    });
+function startServerPolling() {
+  if (serverPollInterval) clearInterval(serverPollInterval);
 
-    cloudEventSource.onerror = () => {
-      setTimeout(initCloudSync, 8000);
-    };
-  } catch (err) {
-    console.warn('SSE error:', err);
-  }
+  // Poll server every 2 seconds to guarantee sync even if mobile browser pauses SSE
+  serverPollInterval = setInterval(async () => {
+    try {
+      const res = await fetch('/api/state', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const serverState = (data && data.state) ? data.state : data;
+        if (serverState && serverState.queue) {
+          const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}`;
+          const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}`;
+
+          if (sHash !== lHash) {
+            const prevWasher = getCurrentDutyMember().name;
+            state = { ...DEFAULT_STATE, ...serverState };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            renderAll();
+
+            const newWasher = getCurrentDutyMember().name;
+            if (prevWasher !== newWasher) {
+              soundFx.playVictory();
+              celebration.burst(getCurrentDutyMember().color);
+            }
+          }
+
+          const dot = document.querySelector('.cloud-dot');
+          const label = document.getElementById('cloud-status-label');
+          if (dot) dot.className = 'cloud-dot local-connected';
+          if (label) label.textContent = 'Сервер онлайн 🟢';
+        }
+      }
+    } catch (e) {
+      const dot = document.querySelector('.cloud-dot');
+      const label = document.getElementById('cloud-status-label');
+      if (dot) dot.className = 'cloud-dot';
+      if (label) label.textContent = 'Нет связи с сервером 🔴';
+    }
+  }, 2000);
 }
 
 function connectLocalServerSSE() {
-  if (cloudEventSource) cloudEventSource.close();
+  if (cloudEventSource) {
+    cloudEventSource.close();
+    cloudEventSource = null;
+  }
   try {
     cloudEventSource = new EventSource('/api/events');
     cloudEventSource.addEventListener('state_update', (e) => {
       try {
-        const newState = JSON.parse(e.data);
-        state = { ...DEFAULT_STATE, ...newState };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        renderAll();
-      } catch (err) {}
+        const raw = JSON.parse(e.data);
+        const serverState = (raw && raw.state) ? raw.state : raw;
+        if (serverState && serverState.queue) {
+          const prevWasher = getCurrentDutyMember().name;
+          state = { ...DEFAULT_STATE, ...serverState };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          renderAll();
+
+          const newWasher = getCurrentDutyMember().name;
+          if (prevWasher !== newWasher) {
+            soundFx.playVictory();
+            celebration.burst(getCurrentDutyMember().color);
+          }
+        }
+      } catch (err) {
+        console.error('Error handling SSE state_update:', err);
+      }
     });
-    cloudEventSource.onerror = () => {
-      setTimeout(initCloudSync, 5000);
+
+    cloudEventSource.onopen = () => {
+      const dot = document.querySelector('.cloud-dot');
+      const label = document.getElementById('cloud-status-label');
+      if (dot) dot.className = 'cloud-dot local-connected';
+      if (label) label.textContent = 'Сервер онлайн 🟢';
     };
-  } catch (err) {}
+
+    cloudEventSource.onerror = () => {
+      setTimeout(initCloudSync, 4000);
+    };
+  } catch (err) {
+    console.warn('SSE not supported:', err);
+  }
 }
 
 async function pushStateToCloud() {
-  const cloudUrl = settings.firebaseUrl || settings.cloudUrl;
-  if (cloudUrl && cloudUrl.trim() !== '') {
-    let cleanUrl = cloudUrl.trim();
-    if (!cleanUrl.startsWith('http')) cleanUrl = 'https://' + cleanUrl;
-    if (cleanUrl.endsWith('/')) cleanUrl = cleanUrl.slice(0, -1);
-
-    const isFirebase = cleanUrl.includes('firebaseio.com');
-    const targetUrl = isFirebase ? `${cleanUrl}/state.json` : cleanUrl;
-    const method = isFirebase ? 'PUT' : 'POST';
-
-    try {
-      await fetch(targetUrl, {
-        method: method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state)
-      });
-      return;
-    } catch (e) {
-      console.warn('Failed to push to cloud endpoint:', e);
-    }
-  }
-
-  // Push to local server if available
+  // Always push directly to Master Raspberry Pi server
   try {
-    await fetch('/api/state', {
+    const res = await fetch('/api/state', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(state)
     });
-  } catch (e) {}
+    if (res.ok) {
+      const dot = document.querySelector('.cloud-dot');
+      const label = document.getElementById('cloud-status-label');
+      if (dot) dot.className = 'cloud-dot local-connected';
+      if (label) label.textContent = 'Сервер онлайн 🟢';
+    }
+  } catch (e) {
+    console.warn('Failed to push state to server:', e);
+    const dot = document.querySelector('.cloud-dot');
+    const label = document.getElementById('cloud-status-label');
+    if (dot) dot.className = 'cloud-dot';
+    if (label) label.textContent = 'Ошибка отправки 🔴';
+  }
 }
+
+// Re-sync immediately on phone wake up / screen unlock
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    initCloudSync();
+  }
+});
+window.addEventListener('pageshow', () => {
+  initCloudSync();
+});
+window.addEventListener('focus', () => {
+  initCloudSync();
+});
 
 // ========================================================
 // CORE TURN & WASH LOGIC

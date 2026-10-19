@@ -1,17 +1,30 @@
 // ==========================================
-// ЧИСТАЯ ТАРЕЛКА — Локальный сервер синхронизации
-// Без внешних зависимостей (чистый Node.js)
+// ЧИСТАЯ ТАРЕЛКА — Сервер для Raspberry Pi
+// Единая база данных для всех устройств семьи
 // ==========================================
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { exec } = require('child_process');
 
 const PORT = process.env.PORT || 8080;
 const DATA_FILE = path.join(__dirname, 'data.json');
 const PUBLIC_DIR = __dirname;
+
+const DEFAULT_STATE = {
+  members: {
+    mama: { id: 'mama', name: 'Мама', role: 'Мама', avatar: '👩', color: '#ec4899', title: 'Хранительница очага' },
+    papa: { id: 'papa', name: 'Папа', role: 'Папа', avatar: '👨', color: '#0284c7', title: 'Гроза сковородок' },
+    serezha: { id: 'serezha', name: 'Серёжа', role: 'Сын', avatar: '👦', color: '#10b981', title: 'Мастер мыльной пены' },
+    vasya: { id: 'vasya', name: 'Вася', role: 'Сын', avatar: '🧒', color: '#f59e0b', title: 'Повелитель тарелок' }
+  },
+  queue: ['mama', 'papa', 'serezha', 'vasya'],
+  currentQueueIndex: 0,
+  dutyStartedAt: Date.now(),
+  stats: { mama: 0, papa: 0, serezha: 0, vasya: 0 },
+  history: []
+};
 
 // MIME types
 const MIME_TYPES = {
@@ -24,22 +37,33 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
-// Connected SSE clients for live synchronization
+// Connected SSE clients
 const sseClients = new Set();
 
-// Load or initialize state
-function loadSavedData() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+// Load or create state file on disk
+function getOrCreateState() {
+  if (fs.existsSync(DATA_FILE)) {
+    try {
+      const content = fs.readFileSync(DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (parsed && parsed.queue && Array.isArray(parsed.queue)) {
+        return parsed;
+      }
+    } catch (e) {
+      console.error('Error reading data.json, re-initializing:', e);
     }
-  } catch (err) {
-    console.error('Error loading data.json:', err);
   }
-  return null;
+  // Initialize default file
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(DEFAULT_STATE, null, 2), 'utf-8');
+    console.log('✅ Инициализирована база данных data.json');
+  } catch (err) {
+    console.error('Failed to create data.json:', err);
+  }
+  return DEFAULT_STATE;
 }
 
-function saveStateData(data) {
+function saveStateToDisk(data) {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
@@ -47,9 +71,9 @@ function saveStateData(data) {
   }
 }
 
-// Broadcast new state to all connected devices in the home
-function broadcast(data, eventType = 'state_update') {
-  const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+// Broadcast updates to all devices instantly
+function broadcastUpdate(data) {
+  const payload = `event: state_update\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of sseClients) {
     try {
       client.write(payload);
@@ -59,7 +83,7 @@ function broadcast(data, eventType = 'state_update') {
   }
 }
 
-// Get Local Wi-Fi IPv4 address
+// Get Local IPv4
 function getLocalIp() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
@@ -69,11 +93,11 @@ function getLocalIp() {
       }
     }
   }
-  return 'localhost';
+  return '192.168.1.75';
 }
 
 const server = http.createServer((req, res) => {
-  // CORS Headers for flexible access
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -86,41 +110,50 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  // API: Get current server state
+  // 1. API: Get Current Master State
   if (url.pathname === '/api/state' && req.method === 'GET') {
-    const data = loadSavedData();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ exists: !!data, state: data }));
+    const currentState = getOrCreateState();
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache'
+    });
+    res.end(JSON.stringify(currentState));
     return;
   }
 
-  // API: Update state and broadcast to all devices
+  // 2. API: Update State and notify all other devices
   if (url.pathname === '/api/state' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       try {
-        const parsed = JSON.parse(body);
-        saveStateData(parsed);
-        broadcast(parsed, 'state_update');
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
+        const parsedState = JSON.parse(body);
+        if (parsedState && parsedState.queue) {
+          saveStateToDisk(parsedState);
+          broadcastUpdate(parsedState);
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ success: true }));
+          console.log(`[${new Date().toLocaleTimeString()}] Посуда обновлена! Синхронизировано на всех устройствах.`);
+          return;
+        }
+        throw new Error('Invalid state structure');
       } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: e.message }));
       }
     });
     return;
   }
 
-  // API: SSE Live Event Stream
+  // 3. API: Real-Time SSE Stream
   if (url.pathname === '/api/events') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive'
     });
-    res.write(':\n\n'); // SSE comment handshake
+    res.write(':\n\n');
     sseClients.add(res);
 
     req.on('close', () => {
@@ -129,8 +162,15 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Static File Serving
-  let filePath = path.join(PUBLIC_DIR, url.pathname === '/' ? 'index.html' : url.pathname);
+  // 4. Serve Static Files
+  let reqPath = url.pathname === '/' ? 'index.html' : url.pathname;
+  let filePath = path.join(PUBLIC_DIR, reqPath);
+  
+  // If not in root, check in public/
+  if (!fs.existsSync(filePath)) {
+    filePath = path.join(PUBLIC_DIR, 'public', reqPath);
+  }
+
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
@@ -153,18 +193,16 @@ const server = http.createServer((req, res) => {
   });
 });
 
+// Initialize database file on startup
+getOrCreateState();
+
 server.listen(PORT, '0.0.0.0', () => {
   const localIp = getLocalIp();
   console.log('\n======================================================');
-  console.log('🍽️   ЧИСТАЯ ТАРЕЛКА — Семейный график мытья посуды');
+  console.log('🍽️   ЧИСТАЯ ТАРЕЛКА — Сервер на Raspberry Pi');
   console.log('======================================================');
-  console.log(`💻  На этом компьютере:  http://localhost:${PORT}`);
-  console.log(`📱  Для телефонов и планшета на кухне:`);
+  console.log(`📱  Открывайте на всех телефонах в домашнем Wi-Fi:`);
   console.log(`    👉  http://${localIp}:${PORT}`);
+  console.log(`💾  База данных: ${DATA_FILE}`);
   console.log('======================================================\n');
-
-  // Open in browser on Mac
-  if (process.platform === 'darwin' && !process.env.NO_AUTO_OPEN) {
-    exec(`open http://localhost:${PORT}`);
-  }
 });

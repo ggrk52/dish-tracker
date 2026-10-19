@@ -1,46 +1,66 @@
 #!/usr/bin/env python3
 # ========================================================
-# ЧИСТАЯ ТАРЕЛКА — Сервер на Python 3
-# Работает на любой Raspberry Pi «из коробки» без установки Node.js!
+# ЧИСТАЯ ТАРЕЛКА — Сервер на Python 3 для Raspberry Pi
 # ========================================================
 
 import os
 import sys
 import json
 import socket
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 PORT = int(os.environ.get("PORT", 8080))
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATA_FILE = os.path.join(BASE_DIR, "data.json")
 
-def load_data():
+DEFAULT_STATE = {
+  "members": {
+    "mama": {"id": "mama", "name": "Мама", "role": "Мама", "avatar": "👩", "color": "#ec4899", "title": "Хранительница очага"},
+    "papa": {"id": "papa", "name": "Папа", "role": "Папа", "avatar": "👨", "color": "#0284c7", "title": "Гроза сковородок"},
+    "serezha": {"id": "serezha", "name": "Серёжа", "role": "Сын", "avatar": "👦", "color": "#10b981", "title": "Мастер мыльной пены"},
+    "vasya": {"id": "vasya", "name": "Вася", "role": "Сын", "avatar": "🧒", "color": "#f59e0b", "title": "Повелитель тарелок"}
+  },
+  "queue": ["mama", "papa", "serezha", "vasya"],
+  "currentQueueIndex": 0,
+  "dutyStartedAt": 0,
+  "stats": {"mama": 0, "papa": 0, "serezha": 0, "vasya": 0},
+  "history": []
+}
+
+def get_or_create_state():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                if data and "queue" in data:
+                    return data
         except Exception:
             pass
-    return None
+    # Initialize file
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(DEFAULT_STATE, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error initializing data.json: {e}")
+    return DEFAULT_STATE
 
-def save_data(data):
+def save_state(data):
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"Error saving data: {e}")
+        print(f"Error saving data.json: {e}")
 
 class DishDutyHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BASE_DIR, **kwargs)
 
     def end_headers(self):
-        # CORS & Cache headers
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -50,10 +70,9 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
 
-        # API: get state
         if parsed.path == "/api/state":
-            data = load_data()
-            payload = json.dumps({"exists": bool(data), "state": data}, ensure_ascii=False).encode("utf-8")
+            data = get_or_create_state()
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
@@ -61,7 +80,6 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
             self.wfile.write(payload)
             return
 
-        # Serve index.html by default
         if parsed.path in ["", "/"]:
             self.path = "/index.html"
 
@@ -70,13 +88,12 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
 
-        # API: update state
         if parsed.path == "/api/state":
             length = int(self.headers.get("Content-Length", 0))
             raw_body = self.rfile.read(length).decode("utf-8")
             try:
                 state_data = json.loads(raw_body)
-                save_data(state_data)
+                save_state(state_data)
                 res_body = json.dumps({"success": True}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -96,30 +113,18 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
 def run():
+    get_or_create_state()
     server_address = ("0.0.0.0", PORT)
-    httpd = HTTPServer(server_address, DishDutyHandler)
-
-    hostname = socket.gethostname()
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        local_ip = "192.168.1.75"
+    httpd = ThreadingHTTPServer(server_address, DishDutyHandler)
 
     print("\n======================================================")
-    print("🍽️   ЧИСТАЯ ТАРЕЛКА — Запущена на Raspberry Pi (Python 3)")
+    print("🍽️   ЧИСТАЯ ТАРЕЛКА — Сервер на Raspberry Pi (Python 3)")
     print("======================================================")
-    print(f"📱  Для телефонов и планшетов в домашнем Wi-Fi:")
-    print(f"    👉  http://{local_ip}:{PORT}")
+    print(f"📱  Доступно по адресу: http://192.168.1.75:{PORT}")
+    print(f"💾  База данных: {DATA_FILE}")
     print("======================================================\n")
 
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nСервер остановлен.")
-        httpd.server_close()
+    httpd.serve_forever()
 
 if __name__ == "__main__":
     run()
