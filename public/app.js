@@ -1182,6 +1182,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Hamburger Settings button
+  const btnMenu = document.getElementById('btn-menu');
+  if (btnMenu) {
+    btnMenu.addEventListener('click', () => {
+      soundFx.playClick();
+      openModal('modal-settings');
+    });
+  }
+
+  // Ensure active tab exists
+  if (!document.getElementById(settings.activeTab)) {
+    settings.activeTab = 'tab-duty';
+  }
+
   // Main Wash button
   document.getElementById('btn-wash-done').addEventListener('click', () => {
     handleWashDone();

@@ -44,6 +44,9 @@
         <button id="btn-theme" class="nav-icon-btn" title="Сменить тему" aria-label="Сменить тему">
           <span class="btn-icon">🌙</span>
         </button>
+        <button id="btn-menu" class="nav-icon-btn" title="Настройки" aria-label="Настройки">
+          <span class="btn-icon">☰</span>
+        </button>
       </div>
     </header>
 
@@ -194,91 +197,9 @@
         </div>
       </section>
 
-      <!-- ========================================== -->
-      <!-- TAB 4: CLOUD & SETTINGS / ОБЛАКО           -->
-      <!-- ========================================== -->
-      <section id="tab-settings" class="tab-view">
-        <!-- Cloud Sync Card -->
-        <div class="content-card highlight-card">
-          <div class="card-header">
-            <div class="card-title">
-              <span class="title-icon">☁️</span>
-              <span>Доступ из интернета и Синхронизация</span>
-            </div>
-          </div>
-          
-          <p class="card-desc">
-            Чтобы приложение открывалось у всех членов семьи <b>через интернет (LTE / 4G / где угодно)</b> без необходимости запускать локальный сервер на компьютере:
-          </p>
-
-          <div class="cloud-modes">
-            <!-- Firebase / Web DB mode -->
-            <div class="cloud-setup-box">
-              <div class="setup-header">
-                <span class="setup-badge">Рекомендуется • 100% Бесплатно</span>
-                <span class="setup-title">Облачная база (Firebase Realtime DB)</span>
-              </div>
-              <p class="setup-text">
-                Данные сохраняются в облаке Google и синхронизируются мгновенно между всеми айфонами и смартфонами.
-              </p>
-              
-              <div class="input-group">
-                <label for="input-firebase-url">URL вашей базы Firebase (или ID комнаты):</label>
-                <div class="input-with-btn">
-                  <input type="text" id="input-firebase-url" placeholder="https://ваш-проект.firebaseio.com">
-                  <button id="btn-save-cloud" class="primary-action-btn">Сохранить</button>
-                </div>
-              </div>
-
-              <button id="btn-cloud-guide" class="text-link-btn">
-                📖 Инструкция за 2 минуты: как создать бесплатную базу и выложить на Vercel / GitHub
-              </button>
-            </div>
-
-            <!-- Local Network Mode -->
-            <div class="cloud-setup-box secondary">
-              <div class="setup-header">
-                <span class="setup-badge neutral">Домашняя сеть</span>
-                <span class="setup-title">Локальный сервер Wi-Fi</span>
-              </div>
-              <p class="setup-text">
-                Для работы только внутри дома через домашний Wi-Fi:
-              </p>
-              <div class="local-ip-badge">
-                <code id="local-ip-code">http://192.168.1.73:8080</code>
-                <button id="btn-copy-local-ip" class="copy-small-btn">Копировать</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Backup & Data Management -->
-        <div class="content-card">
-          <h3 class="card-title">
-            <span class="title-icon">💾</span>
-            <span>Резервная копия данных</span>
-          </h3>
-          <p class="card-desc">
-            Вся история и статистика сохраняются надёжно. Вы всегда можете сохранить архив или перенести данные на другой телефон.
-          </p>
-          <div class="action-buttons-row">
-            <button id="btn-export-backup" class="secondary-action-btn">
-              <span>📥</span> Скачать резервную копию (JSON)
-            </button>
-            <button id="btn-import-backup" class="secondary-action-btn">
-              <span>📤</span> Восстановить из файла
-            </button>
-            <input type="file" id="file-import-input" accept=".json" style="display: none;">
-          </div>
-          <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 14px;">
-            <button id="btn-reset-data" class="danger-text-btn">Сбросить все данные...</button>
-          </div>
-        </div>
-      </section>
-
     </main>
 
-    <!-- Bottom Navigation Bar (iOS App Style) -->
+    <!-- Bottom Navigation Bar (Clean 3-Tab Family View) -->
     <nav class="bottom-tab-bar">
       <button class="tab-item active" data-tab="tab-duty">
         <span class="tab-icon">🧼</span>
@@ -292,11 +213,67 @@
         <span class="tab-icon">🏆</span>
         <span class="tab-label">Почёт</span>
       </button>
-      <button class="tab-item" data-tab="tab-settings">
-        <span class="tab-icon">☁️</span>
-        <span class="tab-label">Облако</span>
-      </button>
     </nav>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: SETTINGS & BACKUP (Бутерброд / Меню) -->
+  <!-- ========================================== -->
+  <div id="modal-settings" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>⚙️ Настройки и Сервер</h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+
+      <!-- Server & Local Network -->
+      <div class="cloud-setup-box secondary">
+        <div class="setup-header">
+          <span class="setup-badge neutral">Домашний сервер (Raspberry Pi)</span>
+          <span class="setup-title">Адрес в вашей сети Wi-Fi</span>
+        </div>
+        <p class="setup-text">
+          Открывайте на любых телефонах и планшетах дома:
+        </p>
+        <div class="local-ip-badge">
+          <code id="local-ip-code">http://192.168.1.75:8080</code>
+          <button id="btn-copy-local-ip" class="copy-small-btn">Копировать</button>
+        </div>
+      </div>
+
+      <!-- Cloud Sync (Optional) -->
+      <div class="cloud-setup-box" style="margin-top: 4px;">
+        <div class="setup-header">
+          <span class="setup-badge">Облачная синхронизация</span>
+          <span class="setup-title">Внешний URL (если используется)</span>
+        </div>
+        <div class="input-group">
+          <div class="input-with-btn">
+            <input type="text" id="input-firebase-url" placeholder="https://ваш-воркер.workers.dev">
+            <button id="btn-save-cloud" class="primary-action-btn">Сохранить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Backup & Restore -->
+      <div style="margin-top: 8px;">
+        <h4 style="font-size: 0.95rem; margin-bottom: 8px; font-weight: 700;">💾 Резервная копия</h4>
+        <div class="action-buttons-row">
+          <button id="btn-export-backup" class="secondary-action-btn">
+            <span>📥</span> Скачать архив (JSON)
+          </button>
+          <button id="btn-import-backup" class="secondary-action-btn">
+            <span>📤</span> Восстановить из архива
+          </button>
+          <input type="file" id="file-import-input" accept=".json" style="display: none;">
+        </div>
+      </div>
+
+      <!-- Reset Data -->
+      <div style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+        <button id="btn-reset-data" class="danger-text-btn">Сбросить историю и статистику...</button>
+      </div>
+    </div>
   </div>
 
   <!-- ========================================== -->
