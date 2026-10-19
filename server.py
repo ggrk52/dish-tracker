@@ -47,8 +47,10 @@ def get_or_create_state():
 
 def save_state(data):
     try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
+        temp_file = DATA_FILE + ".tmp"
+        with open(temp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(temp_file, DATA_FILE)
     except Exception as e:
         print(f"Error saving data.json: {e}")
 
