@@ -1202,10 +1202,10 @@ function renderAuthStatus() {
     } else {
       settingsBadge.className = 'setup-badge neutral';
       settingsBadge.textContent = '🔒 Только просмотр';
-      settingsDesc.textContent = 'Изменять статус и очередь может только Серёжа с PIN-кодом (525252).';
+      settingsDesc.textContent = 'Изменять статус и очередь может только Серёжа с секретным PIN-кодом.';
       settingsActions.innerHTML = `
         <button type="button" class="primary-action-btn" onclick="closeAllModals(); openAuthModal();">
-          Ввести PIN-код (525252) 🔑
+          Ввести PIN-код 🔑
         </button>
       `;
     }

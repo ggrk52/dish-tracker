@@ -238,7 +238,7 @@
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
 
-      <!-- Access Rights (PIN "525252") -->
+      <!-- Access Rights (Admin PIN) -->
       <div class="cloud-setup-box auth-section">
         <div class="setup-header">
           <span class="setup-badge" id="settings-auth-badge">Режим просмотра</span>
@@ -388,7 +388,7 @@
   </div>
 
   <!-- ========================================== -->
-  <!-- MODAL: Password Auth (PIN 525252)          -->
+  <!-- MODAL: Password Auth                       -->
   <!-- ========================================== -->
   <div id="modal-auth" class="modal-backdrop hidden">
     <div class="modal-card">
@@ -397,11 +397,11 @@
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
       <p class="modal-sub">
-        Отмечать помывку и переключать очередь может только Серёжа. Введите PIN-код (525252):
+        Отмечать помывку и переключать очередь может только Серёжа. Введите секретный PIN-код:
       </p>
       <form id="form-admin-auth">
         <div class="input-group">
-          <input type="password" id="input-admin-pass" class="custom-input" placeholder="PIN (525252)" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" autofocus style="text-align: center; font-size: 1.4rem; letter-spacing: 4px;">
+          <input type="password" id="input-admin-pass" class="custom-input" placeholder="••••••" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" autofocus style="text-align: center; font-size: 1.4rem; letter-spacing: 6px;">
         </div>
         <div id="auth-error-msg" class="auth-error-msg hidden">❌ Неверный PIN-код. Попробуйте еще раз!</div>
         <button type="submit" id="btn-submit-auth" class="primary-btn-block" style="margin-top: 10px;">
