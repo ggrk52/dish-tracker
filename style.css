@@ -163,7 +163,31 @@ body {
 
 .top-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 420px) {
+  .brand-title {
+    font-size: 1.05rem;
+  }
+  .profile-pill-btn {
+    padding: 0 8px;
+    font-size: 0.78rem;
+    height: 34px;
+  }
+  .profile-pill-name {
+    max-width: 60px;
+  }
+  .top-actions {
+    gap: 4px;
+  }
+  .nav-icon-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 0.9rem;
+  }
 }
 
 .nav-icon-btn {
@@ -1714,6 +1738,13 @@ body {
   transition: all 0.15s ease;
   color: var(--text-main);
   width: 100%;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.profile-select-card * {
+  pointer-events: none;
 }
 
 .profile-select-card:hover {

@@ -1358,6 +1358,17 @@ function renderProfileUI() {
 function openModal(id) {
   const modal = document.getElementById(id);
   if (modal) {
+    if (id === 'modal-profile-select') {
+      const userProfile = getCurrentUserProfile();
+      modal.querySelectorAll('.profile-select-card').forEach(card => {
+        const memId = card.getAttribute('data-member');
+        if (userProfile && memId === userProfile) {
+          card.classList.add('selected');
+        } else {
+          card.classList.remove('selected');
+        }
+      });
+    }
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
   }
@@ -1547,7 +1558,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Wake lock
-  document.getElementById('btn-wake').addEventListener('click', toggleWakeLock);
+  const btnWake = document.getElementById('btn-wake');
+  if (btnWake) {
+    btnWake.addEventListener('click', toggleWakeLock);
+  }
 
   // Bottom Tab Navigation
   document.querySelectorAll('.tab-item').forEach(tabBtn => {
@@ -1587,7 +1601,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Profile badge in header
   const btnProfileBadge = document.getElementById('btn-profile-badge');
   if (btnProfileBadge) {
-    btnProfileBadge.addEventListener('click', () => {
+    btnProfileBadge.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       openModal('modal-profile-select');
       if (window.soundFx) soundFx.playClick();
     });
@@ -1596,7 +1612,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Profile button on duty banner
   const btnBannerProfile = document.getElementById('btn-banner-profile');
   if (btnBannerProfile) {
-    btnBannerProfile.addEventListener('click', () => {
+    btnBannerProfile.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       openModal('modal-profile-select');
       if (window.soundFx) soundFx.playClick();
     });
@@ -1604,8 +1622,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Profile cards in profile modal
   document.querySelectorAll('.profile-select-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const memberId = card.getAttribute('data-member');
+    card.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const targetCard = e.currentTarget || e.target.closest('.profile-select-card') || card;
+      const memberId = targetCard.getAttribute('data-member');
       if (memberId) {
         setCurrentUserProfile(memberId);
         closeAllModals();
@@ -1642,84 +1663,115 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Main Wash button
-  document.getElementById('btn-wash-done').addEventListener('click', () => {
-    const userProfile = getCurrentUserProfile();
-    const currentMember = getCurrentDutyMember();
-    const isAdm = isAdmin();
+  const btnWashDone = document.getElementById('btn-wash-done');
+  if (btnWashDone) {
+    btnWashDone.addEventListener('click', () => {
+      const userProfile = getCurrentUserProfile();
+      const currentMember = getCurrentDutyMember();
+      const isAdm = isAdmin();
 
-    if (!userProfile && !isAdm) {
-      openModal('modal-profile-select');
-      return;
-    }
+      if (!userProfile && !isAdm) {
+        openModal('modal-profile-select');
+        return;
+      }
 
-    if (userProfile === currentMember.id || isAdm) {
-      handleWashDone();
-    } else {
-      showToast(`Сейчас дежурит ${currentMember.name}. Отметить может только он(а)!`, '⏳');
-      if (window.soundFx) soundFx.playPop();
-    }
-  });
+      if (userProfile === currentMember.id || isAdm) {
+        handleWashDone();
+      } else {
+        showToast(`Сейчас дежурит ${currentMember.name}. Отметить может только он(а)!`, '⏳');
+        if (window.soundFx) soundFx.playPop();
+      }
+    });
+  }
 
   // Undo button
-  document.getElementById('btn-undo').addEventListener('click', () => {
-    handleUndo();
-  });
+  const btnUndo = document.getElementById('btn-undo');
+  if (btnUndo) {
+    btnUndo.addEventListener('click', () => {
+      handleUndo();
+    });
+  }
 
   // Turn Modifiers (Admin only)
-  document.getElementById('btn-skip-duty').addEventListener('click', () => {
-    requireAdmin(() => handleSkipTurn());
-  });
-  document.getElementById('btn-swap-duty').addEventListener('click', () => {
-    requireAdmin(() => openSwapModal());
-  });
-  document.getElementById('btn-reorder-queue').addEventListener('click', () => {
-    requireAdmin(() => openReorderModal());
-  });
+  const btnSkipDuty = document.getElementById('btn-skip-duty');
+  if (btnSkipDuty) {
+    btnSkipDuty.addEventListener('click', () => {
+      requireAdmin(() => handleSkipTurn());
+    });
+  }
+
+  const btnSwapDuty = document.getElementById('btn-swap-duty');
+  if (btnSwapDuty) {
+    btnSwapDuty.addEventListener('click', () => {
+      requireAdmin(() => openSwapModal());
+    });
+  }
+
+  const btnReorderQueue = document.getElementById('btn-reorder-queue');
+  if (btnReorderQueue) {
+    btnReorderQueue.addEventListener('click', () => {
+      requireAdmin(() => openReorderModal());
+    });
+  }
 
   // Note Modal
-  document.getElementById('btn-add-note').addEventListener('click', () => {
-    const userProfile = getCurrentUserProfile();
-    const currentMember = getCurrentDutyMember();
-    const isAdm = isAdmin();
+  const btnAddNote = document.getElementById('btn-add-note');
+  if (btnAddNote) {
+    btnAddNote.addEventListener('click', () => {
+      const userProfile = getCurrentUserProfile();
+      const currentMember = getCurrentDutyMember();
+      const isAdm = isAdmin();
 
-    if (!userProfile && !isAdm) {
-      openModal('modal-profile-select');
-      return;
-    }
+      if (!userProfile && !isAdm) {
+        openModal('modal-profile-select');
+        return;
+      }
 
-    if (userProfile === currentMember.id || isAdm) {
-      document.getElementById('modal-note-text').value = '';
-      openModal('modal-note');
-    } else {
-      showToast(`Сейчас дежурит ${currentMember.name}!`, '⏳');
-      if (window.soundFx) soundFx.playPop();
-    }
-  });
+      if (userProfile === currentMember.id || isAdm) {
+        const textEl = document.getElementById('modal-note-text');
+        if (textEl) textEl.value = '';
+        openModal('modal-note');
+      } else {
+        showToast(`Сейчас дежурит ${currentMember.name}!`, '⏳');
+        if (window.soundFx) soundFx.playPop();
+      }
+    });
+  }
 
   document.querySelectorAll('.note-tag-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const textarea = document.getElementById('modal-note-text');
       const tag = btn.getAttribute('data-tag');
-      textarea.value = textarea.value ? `${textarea.value} ${tag}` : tag;
-      if (window.soundFx) soundFx.playClick();
+      if (textarea && tag) {
+        textarea.value = textarea.value ? `${textarea.value} ${tag}` : tag;
+        if (window.soundFx) soundFx.playClick();
+      }
     });
   });
 
-  document.getElementById('btn-submit-note-wash').addEventListener('click', () => {
-    const note = document.getElementById('modal-note-text').value;
-    closeAllModals();
-    handleWashDone(note);
-  });
+  const btnSubmitNoteWash = document.getElementById('btn-submit-note-wash');
+  if (btnSubmitNoteWash) {
+    btnSubmitNoteWash.addEventListener('click', () => {
+      const textEl = document.getElementById('modal-note-text');
+      const note = textEl ? textEl.value : '';
+      closeAllModals();
+      handleWashDone(note);
+    });
+  }
 
   // View all history button from Tab 1
-  document.getElementById('btn-view-all-history').addEventListener('click', () => {
-    document.querySelector('[data-tab="tab-history"]').click();
-  });
+  const btnViewAllHistory = document.getElementById('btn-view-all-history');
+  if (btnViewAllHistory) {
+    btnViewAllHistory.addEventListener('click', () => {
+      const histTab = document.querySelector('[data-tab="tab-history"]');
+      if (histTab) histTab.click();
+    });
+  }
 
   // History Filter Chips
   document.querySelectorAll('.filter-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-      soundFx.playClick();
+      if (window.soundFx) soundFx.playClick();
       document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       currentHistoryFilter = chip.getAttribute('data-filter');
@@ -1728,7 +1780,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Export History CSV
-  document.getElementById('btn-export-history').addEventListener('click', exportHistoryToCSV);
+  const btnExportHistory = document.getElementById('btn-export-history');
+  if (btnExportHistory) {
+    btnExportHistory.addEventListener('click', exportHistoryToCSV);
+  }
 
   // Cloud Settings Tab
   const inputFirebase = document.getElementById('input-firebase-url');
