@@ -35,16 +35,13 @@
       </div>
       
       <div class="top-actions">
-        <!-- Profile Selector Button in Header -->
-        <button id="btn-profile-badge" class="profile-pill-btn" type="button" title="Сменить профиль">
-          <span id="profile-badge-avatar" class="profile-pill-avatar">👤</span>
-          <span id="profile-badge-name" class="profile-pill-name">Кто ты?</span>
-          <span class="profile-pill-arrow">▾</span>
+        <!-- Account Button in Header -->
+        <button id="btn-account-badge" class="profile-pill-btn" type="button" title="Мой аккаунт">
+          <span id="account-badge-avatar" class="profile-pill-avatar">👤</span>
+          <span id="account-badge-name" class="profile-pill-name">Войти</span>
+          <span id="account-badge-role" class="profile-pill-arrow">▾</span>
         </button>
 
-        <button id="btn-auth-badge" class="nav-icon-btn auth-badge-btn" type="button" title="Управление (Серёжа)" aria-label="Права доступа">
-          <span id="auth-badge-icon" class="btn-icon">🔒</span>
-        </button>
         <button id="btn-sound" class="nav-icon-btn" type="button" title="Звуки" aria-label="Звуки">
           <span class="btn-icon">🔊</span>
         </button>
@@ -395,81 +392,83 @@
   </div>
 
   <!-- ========================================== -->
-  <!-- MODAL: Password Auth                       -->
+  <!-- MODAL: Family Login (Вход в аккаунт)       -->
   <!-- ========================================== -->
-  <div id="modal-auth" class="modal-backdrop hidden">
-    <div class="modal-card">
+  <div id="modal-login" class="modal-backdrop hidden">
+    <div class="modal-card login-card">
       <div class="modal-head">
-        <h3>🔐 Вход для управления</h3>
+        <h3>🔐 Вход в Чистую Тарелку</h3>
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
       <p class="modal-sub">
-        Отмечать помывку и переключать очередь может только Серёжа. Введите секретный PIN-код:
+        Выберите свой профиль и введите пароль:
       </p>
-      <form id="form-admin-auth">
+
+      <!-- User selection pills -->
+      <div class="login-user-grid" id="login-user-grid">
+        <button type="button" class="login-user-pill" data-user="mama">
+          <span class="login-user-avatar">👩</span>
+          <span class="login-user-name">Мама</span>
+        </button>
+        <button type="button" class="login-user-pill" data-user="papa">
+          <span class="login-user-avatar">👨</span>
+          <span class="login-user-name">Папа</span>
+        </button>
+        <button type="button" class="login-user-pill active" data-user="serezha">
+          <span class="login-user-avatar">👦</span>
+          <span class="login-user-name">Серёжа 👑</span>
+        </button>
+        <button type="button" class="login-user-pill" data-user="vasya">
+          <span class="login-user-avatar">🧒</span>
+          <span class="login-user-name">Вася</span>
+        </button>
+      </div>
+
+      <form id="form-login" style="margin-top: 14px;">
+        <input type="hidden" id="login-username" value="serezha">
+
         <div class="input-group">
-          <input type="password" id="input-admin-pass" class="custom-input" placeholder="••••••" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" autofocus style="text-align: center; font-size: 1.4rem; letter-spacing: 6px;">
+          <label class="input-label" id="login-label-user">Пароль для Серёжи:</label>
+          <div class="password-input-wrap">
+            <input type="password" id="login-password" class="custom-input login-input" placeholder="••••" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" autofocus required>
+            <button type="button" id="btn-toggle-login-pass" class="toggle-pass-btn" aria-label="Показать пароль">👁️</button>
+          </div>
         </div>
-        <div id="auth-error-msg" class="auth-error-msg hidden">❌ Неверный PIN-код. Попробуйте еще раз!</div>
-        <button type="submit" id="btn-submit-auth" class="primary-btn-block" style="margin-top: 10px;">
-          Войти в режим управления 🔓
+
+        <div id="login-error-msg" class="auth-error-msg hidden">❌ Неверный пароль. Попробуйте еще раз!</div>
+
+        <button type="submit" id="btn-submit-login" class="primary-btn-block" style="margin-top: 14px;">
+          Войти в аккаунт 🔓
         </button>
       </form>
     </div>
   </div>
 
   <!-- ========================================== -->
-  <!-- MODAL: Profile Selection (Кто ты?)          -->
+  <!-- MODAL: Account Info & Logout               -->
   <!-- ========================================== -->
-  <div id="modal-profile-select" class="modal-backdrop hidden">
+  <div id="modal-account" class="modal-backdrop hidden">
     <div class="modal-card">
       <div class="modal-head">
-        <h3>👤 Выберите свой профиль</h3>
+        <h3>👤 Мой аккаунт</h3>
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
-      <p class="modal-sub">
-        Кто пользуется этим телефоном? Вы сможете отмечать мытьё посуды в свою очередь:
-      </p>
-      <div class="profile-select-grid" id="profile-select-grid">
-        <button type="button" class="profile-select-card" data-member="mama">
-          <span class="profile-card-avatar">👩</span>
-          <div class="profile-card-info">
-            <span class="profile-card-name">Мама</span>
-            <span class="profile-card-role">Главная хранительница уюта</span>
-          </div>
-          <span class="profile-card-check">✓</span>
-        </button>
-        <button type="button" class="profile-select-card" data-member="papa">
-          <span class="profile-card-avatar">👨</span>
-          <div class="profile-card-info">
-            <span class="profile-card-name">Папа</span>
-            <span class="profile-card-role">Мастер чистой посуды</span>
-          </div>
-          <span class="profile-card-check">✓</span>
-        </button>
-        <button type="button" class="profile-select-card" data-member="serezha">
-          <span class="profile-card-avatar">👦</span>
-          <div class="profile-card-info">
-            <span class="profile-card-name">Серёжа</span>
-            <span class="profile-card-role">Администратор и дежурный</span>
-          </div>
-          <span class="profile-card-check">✓</span>
-        </button>
-        <button type="button" class="profile-select-card" data-member="vasya">
-          <span class="profile-card-avatar">🧒</span>
-          <div class="profile-card-info">
-            <span class="profile-card-name">Вася</span>
-            <span class="profile-card-role">Быстрый мойщик</span>
-          </div>
-          <span class="profile-card-check">✓</span>
-        </button>
+      <div class="account-profile-box">
+        <div class="account-avatar-large" id="acc-modal-avatar">👦</div>
+        <div class="account-info-box">
+          <h4 class="account-name" id="acc-modal-name">Серёжа</h4>
+          <span class="account-role-badge" id="acc-modal-role">👑 Администратор</span>
+        </div>
       </div>
-      <p style="margin-top: 14px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">
-        Выбранный профиль сохранится на этом телефоне. Сменить можно в любой момент, нажав на имя вверху.
-      </p>
+      <div class="account-status-desc" id="acc-modal-desc">
+        Вы авторизованы на этом телефоне. Вам доступны все функции управления дежурствами.
+      </div>
+      <button type="button" id="btn-logout-account" class="danger-btn-block" style="margin-top: 18px;">
+        🚪 Выйти из аккаунта
+      </button>
     </div>
   </div>
 
-  <script src="app.js?v=2.2"></script>
+  <script src="app.js?v=3.0"></script>
 </body>
 </html>

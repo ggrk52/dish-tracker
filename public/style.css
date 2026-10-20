@@ -1827,3 +1827,150 @@ body {
   background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
   box-shadow: 0 10px 24px -4px rgba(245, 158, 11, 0.45);
 }
+
+/* ========================================== */
+/* LOGIN & ACCOUNT MODAL STYLES               */
+/* ========================================== */
+
+.login-user-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.login-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--card-bg-subtle);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-main);
+  font-weight: 700;
+  font-size: 0.92rem;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.login-user-pill:hover {
+  background: var(--card-bg);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.login-user-pill.active {
+  background: var(--primary-subtle);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.login-user-avatar {
+  font-size: 1.5rem;
+}
+
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.toggle-pass-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.15rem;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.toggle-pass-btn:active {
+  transform: translateY(-50%) scale(0.9);
+}
+
+/* Account Info Modal */
+.account-profile-box {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--card-bg-subtle);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  margin-top: 10px;
+}
+
+.account-avatar-large {
+  font-size: 2.8rem;
+  line-height: 1;
+}
+
+.account-info-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.account-name {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.account-role-badge {
+  display: inline-block;
+  background: var(--primary-subtle);
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  width: fit-content;
+}
+
+.account-status-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin-top: 12px;
+}
+
+.danger-btn-block {
+  width: 100%;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+}
+
+.danger-btn-block:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+.danger-btn-block:active {
+  transform: scale(0.98);
+}

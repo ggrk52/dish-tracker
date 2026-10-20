@@ -44,107 +44,164 @@ let cloudEventSource = null;
 let currentHistoryFilter = 'all';
 
 // ========================================================
-// AUTH & ACCESS RIGHTS (Пароль "525252") & PROFILES
+// AUTH & FAMILY ACCOUNTS SYSTEM
+// Логины и пароли:
+// Серёжа: 5252 (Администратор 👑)
+// Мама:    1111 (Дежурный)
+// Папа:    2222 (Дежурный)
+// Вася:    3333 (Дежурный)
 // ========================================================
-const AUTH_STORAGE_KEY = 'dish_tracker_admin_auth';
-const PROFILE_STORAGE_KEY = 'dish_user_profile';
-const VALID_ADMIN_PASSWORDS = ['525252', 'мамамолодец'];
+const AUTH_SESSION_KEY = 'dish_auth_session_v2';
 
-function getCurrentUserProfile() {
-  return localStorage.getItem(PROFILE_STORAGE_KEY) || '';
+function getAuthSession() {
+  try {
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
 }
 
-function setCurrentUserProfile(memberId) {
-  if (memberId && state.members && state.members[memberId]) {
-    localStorage.setItem(PROFILE_STORAGE_KEY, memberId);
+function setAuthSession(sessionData) {
+  if (sessionData && sessionData.user && sessionData.token) {
+    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sessionData));
   } else {
-    localStorage.removeItem(PROFILE_STORAGE_KEY);
+    localStorage.removeItem(AUTH_SESSION_KEY);
   }
   renderAll();
 }
 
-window.getCurrentUserProfile = getCurrentUserProfile;
-window.setCurrentUserProfile = setCurrentUserProfile;
-
-function getSavedAdminPassword() {
-  return localStorage.getItem(AUTH_STORAGE_KEY) || '';
+function isLoggedIn() {
+  const s = getAuthSession();
+  return Boolean(s && s.user && s.token);
 }
 
-function normalizePassword(pass) {
-  if (!pass || typeof pass !== 'string') return '';
-  return pass.trim().toLowerCase().replace(/ё/g, 'е');
-}
-
-function isPasswordValid(pass) {
-  const norm = normalizePassword(pass);
-  return VALID_ADMIN_PASSWORDS.includes(norm);
+function getCurrentUser() {
+  return getAuthSession()?.user || null;
 }
 
 function isAdmin() {
-  return isPasswordValid(getSavedAdminPassword());
+  return getCurrentUser()?.role === 'admin';
 }
 
-let pendingAuthAction = null;
+function getCurrentUserProfile() {
+  return getCurrentUser()?.username || '';
+}
+
+window.getAuthSession = getAuthSession;
+window.setAuthSession = setAuthSession;
+window.isLoggedIn = isLoggedIn;
+window.getCurrentUser = getCurrentUser;
+window.isAdmin = isAdmin;
+window.getCurrentUserProfile = getCurrentUserProfile;
+
+async function loginUser(username, password) {
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      setAuthSession({ user: data.user, token: data.token });
+      closeAllModals();
+      if (window.soundFx) soundFx.playVictory();
+      showToast(`Добро пожаловать, ${data.user.name}! 👋`, data.user.avatar);
+      return { success: true };
+    } else {
+      return { success: false, error: data.error || 'Неверный пароль' };
+    }
+  } catch (err) {
+    console.error('Login error:', err);
+    return { success: false, error: 'Ошибка подключения к серверу' };
+  }
+}
+
+function logoutUser() {
+  setAuthSession(null);
+  closeAllModals();
+  if (window.soundFx) soundFx.playClick();
+  showToast('Вы вышли из аккаунта', '🔒');
+  openLoginModal('serezha');
+}
 
 function requireAdmin(actionCallback) {
   if (isAdmin()) {
     actionCallback();
     return;
   }
-  openAuthModal(actionCallback);
+  showToast('Изменение очереди доступно только Серёже (Администратор) 🔒', '👑');
+  if (window.soundFx) soundFx.playPop();
 }
 
-function openAuthModal(callback = null) {
-  if (callback) pendingAuthAction = callback;
-  const input = document.getElementById('input-admin-pass');
-  if (input) {
-    input.value = '';
-    setTimeout(() => input.focus(), 150);
+function openLoginModal(preselectUser = 'serezha') {
+  const modal = document.getElementById('modal-login');
+  if (!modal) return;
+
+  const usernameInput = document.getElementById('login-username');
+  const passInput = document.getElementById('login-password');
+  const errorMsg = document.getElementById('login-error-msg');
+  const labelEl = document.getElementById('login-label-user');
+
+  if (usernameInput) usernameInput.value = preselectUser;
+  if (passInput) {
+    passInput.value = '';
+    passInput.type = 'password';
   }
-  const err = document.getElementById('auth-error-msg');
-  if (err) err.classList.add('hidden');
-  openModal('modal-auth');
+  if (errorMsg) errorMsg.classList.add('hidden');
+
+  document.querySelectorAll('.login-user-pill').forEach(pill => {
+    const u = pill.getAttribute('data-user');
+    if (u === preselectUser) {
+      pill.classList.add('active');
+      const nameText = pill.querySelector('.login-user-name')?.textContent || u;
+      if (labelEl) labelEl.textContent = `Пароль для ${nameText}:`;
+    } else {
+      pill.classList.remove('active');
+    }
+  });
+
+  openModal('modal-login');
+  setTimeout(() => { if (passInput) passInput.focus(); }, 150);
 }
 
-function handleAuthSubmit() {
-  const input = document.getElementById('input-admin-pass');
-  const err = document.getElementById('auth-error-msg');
-  const entered = input ? input.value : '';
+function openAccountModal() {
+  const user = getCurrentUser();
+  if (!user) {
+    openLoginModal('serezha');
+    return;
+  }
 
-  if (isPasswordValid(entered)) {
-    localStorage.setItem(AUTH_STORAGE_KEY, '525252');
-    closeAllModals();
-    if (window.soundFx) soundFx.playVictory();
-    showToast('👑 Режим управления активирован (Серёжа)!', '🎉');
-    renderAuthStatus();
+  const avatarEl = document.getElementById('acc-modal-avatar');
+  const nameEl = document.getElementById('acc-modal-name');
+  const roleEl = document.getElementById('acc-modal-role');
+  const descEl = document.getElementById('acc-modal-desc');
 
-    if (typeof pendingAuthAction === 'function') {
-      const fn = pendingAuthAction;
-      pendingAuthAction = null;
-      fn();
-    }
-  } else {
-    if (err) err.classList.remove('hidden');
-    if (window.soundFx) soundFx.playPop();
-    if (input) {
-      input.classList.add('input-shake');
-      setTimeout(() => input.classList.remove('input-shake'), 400);
+  if (avatarEl) avatarEl.textContent = user.avatar || '👤';
+  if (nameEl) nameEl.textContent = user.name || user.username;
+  if (roleEl) {
+    if (user.role === 'admin') {
+      roleEl.textContent = '👑 Администратор';
+      roleEl.style.background = 'rgba(16, 185, 129, 0.15)';
+      roleEl.style.color = '#10b981';
+    } else {
+      roleEl.textContent = 'Дежурный';
+      roleEl.style.background = 'rgba(59, 130, 246, 0.15)';
+      roleEl.style.color = '#3b82f6';
     }
   }
-}
+  if (descEl) {
+    if (user.role === 'admin') {
+      descEl.textContent = 'Вы авторизованы как Серёжа. Вам доступны все права: изменение очереди, пропуск, обмен и сброс.';
+    } else {
+      descEl.textContent = `Вы авторизованы как ${user.name}. Вы можете отмечать помывку, когда наступит ваша очередь.`;
+    }
+  }
 
-function logoutAdmin() {
-  localStorage.removeItem(AUTH_STORAGE_KEY);
-  if (window.soundFx) soundFx.playClick();
-  showToast('🔒 Переключено в режим просмотра', '👁️');
-  renderAuthStatus();
+  openModal('modal-account');
 }
-
-window.isAdmin = isAdmin;
-window.requireAdmin = requireAdmin;
-window.openAuthModal = openAuthModal;
-window.handleAuthSubmit = handleAuthSubmit;
-window.logoutAdmin = logoutAdmin;
 
 // ========================================================
 // STORAGE & SETTINGS LOAD/SAVE
@@ -524,13 +581,10 @@ function connectLocalServerSSE() {
   }
 }
 
-async function pushStateToCloud(actionType = null, memberId = null) {
-  const profile = memberId || getCurrentUserProfile();
-  const adminPass = getSavedAdminPassword() || '';
-  const isAdm = isAdmin();
-
-  if (!isAdm && !profile && !actionType) {
-    console.warn('Blocked: Neither admin nor family profile identified.');
+async function pushStateToCloud(actionType = null) {
+  const session = getAuthSession();
+  if (!session || !session.user || !session.token) {
+    console.warn('Blocked: Not authenticated.');
     return;
   }
 
@@ -538,19 +592,15 @@ async function pushStateToCloud(actionType = null, memberId = null) {
   try {
     const payload = {
       ...state,
-      _adminPassword: adminPass,
-      _memberId: profile || '',
+      _authUser: session.user.username,
+      _authToken: session.token,
       _action: actionType || ''
     };
     const headers = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'X-Auth-User': encodeURIComponent(session.user.username),
+      'X-Auth-Token': encodeURIComponent(session.token)
     };
-    if (adminPass) {
-      headers['X-Admin-Password'] = encodeURIComponent(adminPass);
-    }
-    if (profile) {
-      headers['X-Member-Id'] = encodeURIComponent(profile);
-    }
 
     const res = await fetch('/api/state', {
       method: 'POST',
@@ -562,15 +612,13 @@ async function pushStateToCloud(actionType = null, memberId = null) {
       const label = document.getElementById('cloud-status-label');
       if (dot) dot.className = 'cloud-dot local-connected';
       if (label) label.textContent = 'Сервер онлайн 🟢';
+    } else if (res.status === 401) {
+      console.warn('Authentication token expired or rejected by server.');
+      setAuthSession(null);
+      openLoginModal('serezha');
     } else if (res.status === 403) {
       const errData = await res.json().catch(() => ({}));
-      console.warn('Server rejected update:', errData.error || res.statusText);
-      if (isAdm && !profile) {
-        logoutAdmin();
-        alert('Ошибка доступа: пароль администратора на сервере не совпал.');
-      } else {
-        showToast(errData.error || 'Действие отклонено сервером', '🔒');
-      }
+      showToast(errData.error || 'Действие отклонено сервером', '🔒');
       initCloudSync();
     }
   } catch (e) {
@@ -605,15 +653,15 @@ function getCurrentDutyMember() {
 
 function handleWashDone(note = '') {
   const currentMember = getCurrentDutyMember();
-  const userProfile = getCurrentUserProfile();
+  const user = getCurrentUser();
   const isAdm = isAdmin();
 
-  if (!userProfile && !isAdm) {
-    openModal('modal-profile-select');
+  if (!isLoggedIn()) {
+    openLoginModal();
     return;
   }
 
-  if (!isAdm && userProfile !== currentMember.id) {
+  if (!isAdm && user.username !== currentMember.id) {
     showToast(`Сейчас дежурит ${currentMember.name}. Отметить может только он(а)!`, '⏳');
     if (window.soundFx) soundFx.playPop();
     return;
@@ -652,7 +700,7 @@ function handleWashDone(note = '') {
   state.currentQueueIndex = (state.currentQueueIndex + 1) % state.queue.length;
   state.dutyStartedAt = now;
 
-  saveState(false, 'wash', userProfile || currentMember.id);
+  saveState(false, 'wash');
   renderAll();
 
   // Celebratory FX & Audio
@@ -669,11 +717,11 @@ function handleWashDone(note = '') {
 function handleUndo() {
   if (!undoAction) return;
 
-  const userProfile = getCurrentUserProfile();
+  const user = getCurrentUser();
   const isAdm = isAdmin();
 
-  if (!isAdm && userProfile !== undoAction.memberId) {
-    requireAdmin(() => handleUndo());
+  if (!isAdm && (!user || user.username !== undoAction.memberId)) {
+    showToast('Отменить помывку может только тот, кто помыл, или Серёжа 🔒', 'ℹ️');
     return;
   }
 
@@ -682,10 +730,9 @@ function handleUndo() {
   state.dutyStartedAt = undoAction.prevDutyStartedAt;
   state.history = state.history.filter(h => h.id !== undoAction.historyItemId);
 
-  const prevWasher = undoAction.memberId;
   undoAction = null;
   hideUndoToast();
-  saveState(false, 'undo', userProfile || prevWasher);
+  saveState(false, 'undo');
   renderAll();
   if (window.soundFx) soundFx.playClick();
   showToast('Помывка отменена ↩️', 'ℹ️');
@@ -696,7 +743,7 @@ function handleSkipTurn() {
   state.currentQueueIndex = (state.currentQueueIndex + 1) % state.queue.length;
   state.dutyStartedAt = Date.now();
 
-  saveState();
+  saveState(false, 'skip');
   renderAll();
   soundFx.playPop();
   showUndoToast(`Очередь ${current.name} пропущена ⏩`, 4000);
@@ -713,7 +760,7 @@ function handleSwapTurn(targetMemberId) {
     state.queue[targetIdx] = temp;
 
     state.dutyStartedAt = Date.now();
-    saveState();
+    saveState(false, 'swap');
     renderAll();
     soundFx.playClick();
     closeAllModals();
@@ -728,7 +775,7 @@ function handleReaction(historyId, reactionType) {
   item.reactions[reactionType] = (item.reactions[reactionType] || 0) + 1;
 
   if (window.soundFx) soundFx.playPop();
-  saveState(false, 'reaction', getCurrentUserProfile());
+  saveState(false, 'reaction');
   renderHistory();
 }
 
@@ -1195,20 +1242,30 @@ function hideUndoToast() {
 // AUTH UI STATUS RENDERING
 // ========================================================
 function renderAuthStatus() {
+  const user = getCurrentUser();
   const admin = isAdmin();
 
-  // 1. Header button
-  const authBadge = document.getElementById('btn-auth-badge');
-  const authIcon = document.getElementById('auth-badge-icon');
-  if (authBadge && authIcon) {
-    if (admin) {
-      authBadge.classList.add('is-admin');
-      authIcon.textContent = '👑';
-      authBadge.title = '👑 Режим управления (Серёжа). Нажмите, чтобы выйти';
+  // 1. Top nav account pill button
+  const accBtn = document.getElementById('btn-account-badge');
+  const accAvatar = document.getElementById('account-badge-avatar');
+  const accName = document.getElementById('account-badge-name');
+  const accRole = document.getElementById('account-badge-role');
+
+  if (accBtn && accAvatar && accName) {
+    if (user) {
+      accAvatar.textContent = user.avatar || '👤';
+      accName.textContent = user.name || user.username;
+      if (accRole) {
+        accRole.textContent = admin ? '👑' : '▾';
+      }
+      accBtn.classList.toggle('is-admin', admin);
+      accBtn.title = `Вы вошли как ${user.name} (${admin ? 'Администратор' : 'Дежурный'}). Нажмите для просмотра`;
     } else {
-      authBadge.classList.remove('is-admin');
-      authIcon.textContent = '🔒';
-      authBadge.title = '🔒 Режим управления. Нажмите для ввода PIN-кода (Серёжа)';
+      accAvatar.textContent = '👤';
+      accName.textContent = 'Войти';
+      if (accRole) accRole.textContent = '▾';
+      accBtn.classList.remove('is-admin');
+      accBtn.title = 'Нажмите, чтобы войти в аккаунт';
     }
   }
 
@@ -1217,22 +1274,33 @@ function renderAuthStatus() {
   const settingsDesc = document.getElementById('settings-auth-desc');
   const settingsActions = document.getElementById('settings-auth-actions');
   if (settingsBadge && settingsDesc && settingsActions) {
-    if (admin) {
-      settingsBadge.className = 'setup-badge';
-      settingsBadge.textContent = '👑 Режим управления (Серёжа)';
-      settingsDesc.textContent = 'Этот телефон авторизован. Серёжа может менять порядок очереди, пропускать ход и сбрасывать данные.';
-      settingsActions.innerHTML = `
-        <button type="button" class="secondary-action-btn" onclick="logoutAdmin(); closeAllModals();">
-          Выйти из режима управления
-        </button>
-      `;
+    if (user) {
+      if (admin) {
+        settingsBadge.className = 'setup-badge';
+        settingsBadge.textContent = '👑 Администратор (Серёжа)';
+        settingsDesc.textContent = 'Вам доступны все права: управление очередью, пропуск, обмен и сброс данных.';
+        settingsActions.innerHTML = `
+          <button type="button" class="secondary-action-btn" onclick="openAccountModal();">
+            Мой аккаунт (Серёжа) 👤
+          </button>
+        `;
+      } else {
+        settingsBadge.className = 'setup-badge neutral';
+        settingsBadge.textContent = `${user.name} (Дежурный)`;
+        settingsDesc.textContent = 'Вы можете отмечать помывку посуды, когда наступит ваша очередь. Изменение очереди закрыто.';
+        settingsActions.innerHTML = `
+          <button type="button" class="secondary-action-btn" onclick="openAccountModal();">
+            Мой аккаунт (${user.name}) 👤
+          </button>
+        `;
+      }
     } else {
       settingsBadge.className = 'setup-badge neutral';
-      settingsBadge.textContent = '🔒 Настройки очереди';
-      settingsDesc.textContent = 'Менять порядок очереди и делать сброс может только Серёжа с секретным PIN-кодом.';
+      settingsBadge.textContent = '🔒 Не авторизован';
+      settingsDesc.textContent = 'Войдите в аккаунт, чтобы отмечать помытую посуду.';
       settingsActions.innerHTML = `
-        <button type="button" class="primary-action-btn" onclick="closeAllModals(); openAuthModal();">
-          Ввести PIN-код 🔑
+        <button type="button" class="primary-action-btn" onclick="closeAllModals(); openLoginModal('serezha');">
+          Войти в аккаунт 🔓
         </button>
       `;
     }
@@ -1243,29 +1311,11 @@ function renderAuthStatus() {
 // PROFILE & DYNAMIC TURN UI RENDERING
 // ========================================================
 function renderProfileUI() {
-  const userProfile = getCurrentUserProfile();
+  const user = getCurrentUser();
   const currentDuty = getCurrentDutyMember();
   const isAdm = isAdmin();
-  const myMember = userProfile && state.members ? state.members[userProfile] : null;
 
-  // 1. Top nav profile badge
-  const profileAvatar = document.getElementById('profile-badge-avatar');
-  const profileName = document.getElementById('profile-badge-name');
-  const profileBtn = document.getElementById('btn-profile-badge');
-
-  if (profileAvatar && profileName) {
-    if (myMember) {
-      profileAvatar.textContent = myMember.avatar;
-      profileName.textContent = myMember.name;
-      if (profileBtn) profileBtn.title = `Ваш профиль: ${myMember.name}. Нажмите, чтобы сменить`;
-    } else {
-      profileAvatar.textContent = '👤';
-      profileName.textContent = 'Кто ты?';
-      if (profileBtn) profileBtn.title = 'Выберите свой профиль';
-    }
-  }
-
-  // 2. Personal duty status banner
+  // 1. Personal duty status banner
   const banner = document.getElementById('banner-duty-status');
   const bannerIcon = document.getElementById('banner-status-icon');
   const bannerTitle = document.getElementById('banner-status-title');
@@ -1273,54 +1323,50 @@ function renderProfileUI() {
   const bannerBtn = document.getElementById('btn-banner-profile');
 
   if (banner && bannerIcon && bannerTitle && bannerSub) {
-    if (!myMember) {
+    if (!user) {
       banner.className = 'duty-status-banner no-profile';
       bannerIcon.textContent = '👤';
-      bannerTitle.textContent = 'Выберите свой профиль';
+      bannerTitle.textContent = 'Войдите в свой аккаунт';
       bannerSub.textContent = 'Отмечать помывку сможет только тот, чья сейчас очередь';
-      if (bannerBtn) bannerBtn.textContent = 'Выбрать 👤';
-    } else if (myMember.id === currentDuty.id) {
+      if (bannerBtn) bannerBtn.textContent = 'Войти 🔓';
+    } else if (user.username === currentDuty.id) {
       banner.className = 'duty-status-banner is-my-turn';
       bannerIcon.textContent = '✨';
-      bannerTitle.textContent = `${myMember.name}, сейчас ваша очередь дежурить! 🧼`;
+      bannerTitle.textContent = `${user.name}, сейчас ваша очередь дежурить! 🧼`;
       bannerSub.textContent = 'Помойте посуду и нажмите «Я помыл(а) посуду!» ниже';
-      if (bannerBtn) bannerBtn.textContent = 'Сменить 👤';
+      if (bannerBtn) bannerBtn.textContent = 'Мой профиль 👤';
+    } else if (isAdm) {
+      banner.className = 'duty-status-banner is-my-turn';
+      bannerIcon.textContent = '👑';
+      bannerTitle.textContent = `Администратор Серёжа (дежурит: ${currentDuty.name} ${currentDuty.avatar})`;
+      bannerSub.textContent = 'Вы можете отметить помывку за дежурного или настроить очередь';
+      if (bannerBtn) bannerBtn.textContent = 'Мой профиль 👤';
     } else {
       banner.className = 'duty-status-banner is-not-my-turn';
       bannerIcon.textContent = '⏳';
       bannerTitle.textContent = `Сейчас дежурит: ${currentDuty.name} ${currentDuty.avatar}`;
-      bannerSub.textContent = `Ваш черёд наступит позже. На этом телефоне доступен просмотр`;
-      if (bannerBtn) bannerBtn.textContent = 'Сменить 👤';
+      bannerSub.textContent = `Ваш черёд наступит позже (${user.name}). На этом телефоне доступен просмотр`;
+      if (bannerBtn) bannerBtn.textContent = 'Мой профиль 👤';
     }
   }
 
-  // 3. Highlight selected card in profile modal
-  document.querySelectorAll('.profile-select-card').forEach(card => {
-    const memId = card.getAttribute('data-member');
-    if (userProfile && memId === userProfile) {
-      card.classList.add('selected');
-    } else {
-      card.classList.remove('selected');
-    }
-  });
-
-  // 4. Wash button styling & text
+  // 2. Wash button styling & text
   const washBtn = document.getElementById('btn-wash-done');
   if (washBtn) {
     washBtn.classList.remove('btn-locked', 'btn-my-turn', 'btn-not-my-turn', 'btn-no-profile');
 
-    if (!userProfile && !isAdm) {
+    if (!user) {
       washBtn.classList.add('btn-no-profile');
       washBtn.innerHTML = `
         <span class="wash-icon">👤</span>
         <div class="wash-label-box">
           <span class="wash-title">КТО ПОМЫЛ ПОСУДУ?</span>
-          <span class="wash-sub">Нажмите, чтобы выбрать свой профиль 👤</span>
+          <span class="wash-sub">Нажмите, чтобы войти в аккаунт 🔓</span>
         </div>
       `;
-    } else if (userProfile === currentDuty.id) {
+    } else if (user.username === currentDuty.id) {
       washBtn.classList.add('btn-my-turn');
-      const actionTitle = (myMember && myMember.id === 'mama') ? 'Я ПОМЫЛА ПОСУДУ!' : 'Я ПОМЫЛ ПОСУДУ!';
+      const actionTitle = (user.username === 'mama') ? 'Я ПОМЫЛА ПОСУДУ!' : 'Я ПОМЫЛ ПОСУДУ!';
       washBtn.innerHTML = `
         <div class="wash-btn-shine"></div>
         <span class="wash-icon">🧼</span>
@@ -1340,7 +1386,7 @@ function renderProfileUI() {
         </div>
       `;
     } else {
-      washBtn.classList.add('btn-not-my-turn');
+      washBtn.classList.add('btn-locked', 'btn-not-my-turn');
       washBtn.innerHTML = `
         <span class="wash-icon">⏳</span>
         <div class="wash-label-box">
@@ -1358,17 +1404,6 @@ function renderProfileUI() {
 function openModal(id) {
   const modal = document.getElementById(id);
   if (modal) {
-    if (id === 'modal-profile-select') {
-      const userProfile = getCurrentUserProfile();
-      modal.querySelectorAll('.profile-select-card').forEach(card => {
-        const memId = card.getAttribute('data-member');
-        if (userProfile && memId === userProfile) {
-          card.classList.add('selected');
-        } else {
-          card.classList.remove('selected');
-        }
-      });
-    }
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
   }
@@ -1481,7 +1516,7 @@ function openReorderModal() {
       state.queue = [...tempQueue];
       state.currentQueueIndex = 0;
       state.dutyStartedAt = Date.now();
-      saveState();
+      saveState(false, 'reorder');
       renderAll();
       closeAllModals();
       soundFx.playVictory();
@@ -1598,67 +1633,124 @@ document.addEventListener('DOMContentLoaded', () => {
     settings.activeTab = 'tab-duty';
   }
 
-  // Profile badge in header
-  const btnProfileBadge = document.getElementById('btn-profile-badge');
-  if (btnProfileBadge) {
-    btnProfileBadge.addEventListener('click', (e) => {
+  // Account badge in header
+  const btnAccountBadge = document.getElementById('btn-account-badge');
+  if (btnAccountBadge) {
+    btnAccountBadge.addEventListener('click', (e) => {
       e.preventDefault();
-      e.stopPropagation();
-      openModal('modal-profile-select');
+      if (isLoggedIn()) {
+        openAccountModal();
+      } else {
+        openLoginModal('serezha');
+      }
       if (window.soundFx) soundFx.playClick();
     });
   }
 
-  // Profile button on duty banner
+  // Account button on duty banner
   const btnBannerProfile = document.getElementById('btn-banner-profile');
   if (btnBannerProfile) {
     btnBannerProfile.addEventListener('click', (e) => {
       e.preventDefault();
-      e.stopPropagation();
-      openModal('modal-profile-select');
+      if (isLoggedIn()) {
+        openAccountModal();
+      } else {
+        openLoginModal('serezha');
+      }
       if (window.soundFx) soundFx.playClick();
     });
   }
 
-  // Profile cards in profile modal
-  document.querySelectorAll('.profile-select-card').forEach(card => {
-    card.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const targetCard = e.currentTarget || e.target.closest('.profile-select-card') || card;
-      const memberId = targetCard.getAttribute('data-member');
-      if (memberId) {
-        setCurrentUserProfile(memberId);
-        closeAllModals();
-        if (window.soundFx) soundFx.playVictory();
-        const mem = state.members[memberId];
-        if (mem) {
-          showToast(`Привет, ${mem.name}! Профиль сохранён на этом телефоне`, mem.avatar);
-        }
+  // User pills in login modal
+  document.querySelectorAll('.login-user-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const u = pill.getAttribute('data-user');
+      if (!u) return;
+      document.querySelectorAll('.login-user-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      const hiddenInput = document.getElementById('login-username');
+      if (hiddenInput) hiddenInput.value = u;
+      const labelEl = document.getElementById('login-label-user');
+      const nameText = pill.querySelector('.login-user-name')?.textContent || u;
+      if (labelEl) labelEl.textContent = `Пароль для ${nameText}:`;
+      const passInput = document.getElementById('login-password');
+      if (passInput) {
+        passInput.value = '';
+        passInput.focus();
       }
+      const errorMsg = document.getElementById('login-error-msg');
+      if (errorMsg) errorMsg.classList.add('hidden');
+      if (window.soundFx) soundFx.playClick();
     });
   });
 
-  // Auth button in header
-  const btnAuthBadge = document.getElementById('btn-auth-badge');
-  if (btnAuthBadge) {
-    btnAuthBadge.addEventListener('click', () => {
-      if (isAdmin()) {
-        if (confirm('Вы авторизованы как администратор (Серёжа).\n\nВыйти из режима управления на этом телефоне?')) {
-          logoutAdmin();
+  // Login form submission
+  const formLogin = document.getElementById('form-login');
+  if (formLogin) {
+    formLogin.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const usernameInput = document.getElementById('login-username');
+      const passInput = document.getElementById('login-password');
+      const errorMsg = document.getElementById('login-error-msg');
+      const submitBtn = document.getElementById('btn-submit-login');
+
+      const username = usernameInput ? usernameInput.value : '';
+      const password = passInput ? passInput.value : '';
+
+      if (!username || !password) return;
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Входим... ⏳';
+      }
+
+      const res = await loginUser(username, password);
+
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Войти в аккаунт 🔓';
+      }
+
+      if (!res.success) {
+        if (errorMsg) {
+          errorMsg.textContent = `❌ ${res.error || 'Неверный пароль'}`;
+          errorMsg.classList.remove('hidden');
         }
-      } else {
-        openAuthModal();
+        if (passInput) {
+          passInput.value = '';
+          passInput.focus();
+        }
+        if (window.soundFx) soundFx.playPop();
       }
     });
   }
 
-  // Auth form submission
-  const formAuth = document.getElementById('form-admin-auth');
-  if (formAuth) {
-    formAuth.addEventListener('submit', (e) => {
-      e.preventDefault();
-      handleAuthSubmit();
+  // Toggle password visibility button
+  const btnTogglePass = document.getElementById('btn-toggle-login-pass');
+  if (btnTogglePass) {
+    btnTogglePass.addEventListener('click', () => {
+      const passInput = document.getElementById('login-password');
+      if (passInput) {
+        if (passInput.type === 'password') {
+          passInput.type = 'text';
+          btnTogglePass.textContent = '🙈';
+        } else {
+          passInput.type = 'password';
+          btnTogglePass.textContent = '👁️';
+        }
+      }
+    });
+  }
+
+  // Logout button in account modal
+  const btnLogoutAccount = document.getElementById('btn-logout-account');
+  if (btnLogoutAccount) {
+    btnLogoutAccount.addEventListener('click', () => {
+      const u = getCurrentUser();
+      const name = u ? u.name : 'пользователя';
+      if (confirm(`Выйти из аккаунта ${name} на этом устройстве?`)) {
+        logoutUser();
+      }
     });
   }
 
@@ -1666,19 +1758,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnWashDone = document.getElementById('btn-wash-done');
   if (btnWashDone) {
     btnWashDone.addEventListener('click', () => {
-      const userProfile = getCurrentUserProfile();
+      const user = getCurrentUser();
       const currentMember = getCurrentDutyMember();
       const isAdm = isAdmin();
 
-      if (!userProfile && !isAdm) {
-        openModal('modal-profile-select');
+      if (!user) {
+        openLoginModal('serezha');
         return;
       }
 
-      if (userProfile === currentMember.id || isAdm) {
+      if (user.username === currentMember.id || isAdm) {
         handleWashDone();
       } else {
-        showToast(`Сейчас дежурит ${currentMember.name}. Отметить может только он(а)!`, '⏳');
+        showToast(`Сейчас дежурит ${currentMember.name}. Отметить может только он(а)! 🔒`, '⏳');
         if (window.soundFx) soundFx.playPop();
       }
     });
@@ -1718,16 +1810,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnAddNote = document.getElementById('btn-add-note');
   if (btnAddNote) {
     btnAddNote.addEventListener('click', () => {
-      const userProfile = getCurrentUserProfile();
+      const user = getCurrentUser();
       const currentMember = getCurrentDutyMember();
       const isAdm = isAdmin();
 
-      if (!userProfile && !isAdm) {
-        openModal('modal-profile-select');
+      if (!user) {
+        openLoginModal('serezha');
         return;
       }
 
-      if (userProfile === currentMember.id || isAdm) {
+      if (user.username === currentMember.id || isAdm) {
         const textEl = document.getElementById('modal-note-text');
         if (textEl) textEl.value = '';
         openModal('modal-note');
@@ -1850,7 +1942,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm('ВНИМАНИЕ: Вы уверены, что хотите сбросить всю историю и статистику мытья посуды?')) {
           state.history = [];
           state.stats = { mama: 0, papa: 0, serezha: 0, vasya: 0 };
-          saveState();
+          saveState(false, 'reset');
           renderAll();
           soundFx.playClick();
           alert('Данные сброшены.');
@@ -1878,10 +1970,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial render
   renderAll();
 
-  // If user hasn't selected their profile yet, prompt them gently on launch
-  if (!getCurrentUserProfile()) {
+  // If user is not logged in yet, prompt them gently with the login modal
+  if (!isLoggedIn()) {
     setTimeout(() => {
-      openModal('modal-profile-select');
+      openLoginModal('serezha');
     }, 450);
   }
 
