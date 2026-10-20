@@ -44,10 +44,27 @@ let cloudEventSource = null;
 let currentHistoryFilter = 'all';
 
 // ========================================================
-// AUTH & ACCESS RIGHTS (Пароль "525252")
+// AUTH & ACCESS RIGHTS (Пароль "525252") & PROFILES
 // ========================================================
 const AUTH_STORAGE_KEY = 'dish_tracker_admin_auth';
+const PROFILE_STORAGE_KEY = 'dish_user_profile';
 const VALID_ADMIN_PASSWORDS = ['525252', 'мамамолодец'];
+
+function getCurrentUserProfile() {
+  return localStorage.getItem(PROFILE_STORAGE_KEY) || '';
+}
+
+function setCurrentUserProfile(memberId) {
+  if (memberId && state.members && state.members[memberId]) {
+    localStorage.setItem(PROFILE_STORAGE_KEY, memberId);
+  } else {
+    localStorage.removeItem(PROFILE_STORAGE_KEY);
+  }
+  renderAll();
+}
+
+window.getCurrentUserProfile = getCurrentUserProfile;
+window.setCurrentUserProfile = setCurrentUserProfile;
 
 function getSavedAdminPassword() {
   return localStorage.getItem(AUTH_STORAGE_KEY) || '';
@@ -162,7 +179,7 @@ function saveSettings() {
   }
 }
 
-function saveState(skipCloudPush = false) {
+function saveState(skipCloudPush = false, actionType = null, memberId = null) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
@@ -170,7 +187,7 @@ function saveState(skipCloudPush = false) {
   }
 
   if (!skipCloudPush) {
-    pushStateToCloud();
+    pushStateToCloud(actionType, memberId);
   }
 }
 
@@ -507,24 +524,37 @@ function connectLocalServerSSE() {
   }
 }
 
-async function pushStateToCloud() {
-  if (!isAdmin()) {
-    console.warn('Blocked: Only admin phone can push changes to server.');
+async function pushStateToCloud(actionType = null, memberId = null) {
+  const profile = memberId || getCurrentUserProfile();
+  const adminPass = getSavedAdminPassword() || '';
+  const isAdm = isAdmin();
+
+  if (!isAdm && !profile && !actionType) {
+    console.warn('Blocked: Neither admin nor family profile identified.');
     return;
   }
+
   // Always push directly to Master Raspberry Pi server
   try {
-    const adminPass = getSavedAdminPassword() || '525252';
     const payload = {
       ...state,
-      _adminPassword: adminPass
+      _adminPassword: adminPass,
+      _memberId: profile || '',
+      _action: actionType || ''
     };
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    if (adminPass) {
+      headers['X-Admin-Password'] = encodeURIComponent(adminPass);
+    }
+    if (profile) {
+      headers['X-Member-Id'] = encodeURIComponent(profile);
+    }
+
     const res = await fetch('/api/state', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Admin-Password': encodeURIComponent(adminPass)
-      },
+      headers,
       body: JSON.stringify(payload)
     });
     if (res.ok) {
@@ -533,9 +563,15 @@ async function pushStateToCloud() {
       if (dot) dot.className = 'cloud-dot local-connected';
       if (label) label.textContent = 'Сервер онлайн 🟢';
     } else if (res.status === 403) {
-      console.warn('Server rejected update: invalid admin password.');
-      logoutAdmin();
-      alert('Ошибка доступа: пароль администратора на сервере не совпал.');
+      const errData = await res.json().catch(() => ({}));
+      console.warn('Server rejected update:', errData.error || res.statusText);
+      if (isAdm && !profile) {
+        logoutAdmin();
+        alert('Ошибка доступа: пароль администратора на сервере не совпал.');
+      } else {
+        showToast(errData.error || 'Действие отклонено сервером', '🔒');
+      }
+      initCloudSync();
     }
   } catch (e) {
     console.warn('Failed to push state to server:', e);
@@ -569,6 +605,20 @@ function getCurrentDutyMember() {
 
 function handleWashDone(note = '') {
   const currentMember = getCurrentDutyMember();
+  const userProfile = getCurrentUserProfile();
+  const isAdm = isAdmin();
+
+  if (!userProfile && !isAdm) {
+    openModal('modal-profile-select');
+    return;
+  }
+
+  if (!isAdm && userProfile !== currentMember.id) {
+    showToast(`Сейчас дежурит ${currentMember.name}. Отметить может только он(а)!`, '⏳');
+    if (window.soundFx) soundFx.playPop();
+    return;
+  }
+
   const now = Date.now();
   const durationMs = Math.max(0, now - (state.dutyStartedAt || now));
 
@@ -590,7 +640,7 @@ function handleWashDone(note = '') {
     memberId: currentMember.id,
     timestamp: now,
     durationMs: durationMs,
-    note: note.trim(),
+    note: (note || '').trim(),
     reactions: { love: 0, clap: 0, star: 0 }
   };
   state.history.unshift(historyItem);
@@ -602,15 +652,16 @@ function handleWashDone(note = '') {
   state.currentQueueIndex = (state.currentQueueIndex + 1) % state.queue.length;
   state.dutyStartedAt = now;
 
-  saveState();
+  saveState(false, 'wash', userProfile || currentMember.id);
   renderAll();
 
   // Celebratory FX & Audio
-  soundFx.playVictory();
-  celebration.burst(currentMember.color);
+  if (window.soundFx) soundFx.playVictory();
+  if (window.celebration) celebration.burst(currentMember.color);
 
   // Show Toast
-  showUndoToast(`${currentMember.name} помыл(а) посуду! Отлично! 🧼`);
+  const verb = (currentMember.id === 'mama') ? 'помыла' : 'помыл';
+  showUndoToast(`${currentMember.name} ${verb} посуду! Отлично! 🧼`);
 
   if ('vibrate' in navigator) navigator.vibrate([60, 40, 100]);
 }
@@ -618,16 +669,26 @@ function handleWashDone(note = '') {
 function handleUndo() {
   if (!undoAction) return;
 
+  const userProfile = getCurrentUserProfile();
+  const isAdm = isAdmin();
+
+  if (!isAdm && userProfile !== undoAction.memberId) {
+    requireAdmin(() => handleUndo());
+    return;
+  }
+
   state.stats = { ...undoAction.prevStats };
   state.currentQueueIndex = undoAction.prevQueueIndex;
   state.dutyStartedAt = undoAction.prevDutyStartedAt;
   state.history = state.history.filter(h => h.id !== undoAction.historyItemId);
 
+  const prevWasher = undoAction.memberId;
   undoAction = null;
   hideUndoToast();
-  saveState();
+  saveState(false, 'undo', userProfile || prevWasher);
   renderAll();
-  soundFx.playClick();
+  if (window.soundFx) soundFx.playClick();
+  showToast('Помывка отменена ↩️', 'ℹ️');
 }
 
 function handleSkipTurn() {
@@ -666,8 +727,8 @@ function handleReaction(historyId, reactionType) {
   if (!item.reactions) item.reactions = { love: 0, clap: 0, star: 0 };
   item.reactions[reactionType] = (item.reactions[reactionType] || 0) + 1;
 
-  soundFx.playPop();
-  saveState();
+  if (window.soundFx) soundFx.playPop();
+  saveState(false, 'reaction', getCurrentUserProfile());
   renderHistory();
 }
 
@@ -679,6 +740,7 @@ function renderAll() {
   renderHistory();
   renderStats();
   renderAuthStatus();
+  renderProfileUI();
 }
 
 function renderDutyTab() {
@@ -1142,50 +1204,15 @@ function renderAuthStatus() {
     if (admin) {
       authBadge.classList.add('is-admin');
       authIcon.textContent = '👑';
-      authBadge.title = '👑 Вы в режиме управления (Серёжа). Нажмите, чтобы выйти';
+      authBadge.title = '👑 Режим управления (Серёжа). Нажмите, чтобы выйти';
     } else {
       authBadge.classList.remove('is-admin');
       authIcon.textContent = '🔒';
-      authBadge.title = '🔒 Режим просмотра. Нажмите, чтобы войти с PIN-кодом';
+      authBadge.title = '🔒 Режим управления. Нажмите для ввода PIN-кода (Серёжа)';
     }
   }
 
-  // 2. Readonly Banner in Tab 1
-  const banner = document.getElementById('banner-readonly');
-  if (banner) {
-    if (admin) {
-      banner.classList.add('hidden');
-    } else {
-      banner.classList.remove('hidden');
-    }
-  }
-
-  // 3. Wash button appearance
-  const washBtn = document.getElementById('btn-wash-done');
-  if (washBtn) {
-    if (admin) {
-      washBtn.classList.remove('btn-locked');
-      washBtn.innerHTML = `
-        <div class="wash-btn-shine"></div>
-        <span class="wash-icon">🧼</span>
-        <div class="wash-label-box">
-          <span class="wash-title">Я ПОМЫЛ ПОСУДУ!</span>
-          <span class="wash-sub">Передать очередь дальше ✨</span>
-        </div>
-      `;
-    } else {
-      washBtn.classList.add('btn-locked');
-      washBtn.innerHTML = `
-        <span class="wash-icon">🔒</span>
-        <div class="wash-label-box">
-          <span class="wash-title">РЕЖИМ ПРОСМОТРА</span>
-          <span class="wash-sub">Нажмите, чтобы ввести PIN 🔑</span>
-        </div>
-      `;
-    }
-  }
-
-  // 4. Settings modal section
+  // 2. Settings modal section
   const settingsBadge = document.getElementById('settings-auth-badge');
   const settingsDesc = document.getElementById('settings-auth-desc');
   const settingsActions = document.getElementById('settings-auth-actions');
@@ -1193,7 +1220,7 @@ function renderAuthStatus() {
     if (admin) {
       settingsBadge.className = 'setup-badge';
       settingsBadge.textContent = '👑 Режим управления (Серёжа)';
-      settingsDesc.textContent = 'Этот телефон авторизован. Серёжа может отмечать помывку и менять порядок очереди.';
+      settingsDesc.textContent = 'Этот телефон авторизован. Серёжа может менять порядок очереди, пропускать ход и сбрасывать данные.';
       settingsActions.innerHTML = `
         <button type="button" class="secondary-action-btn" onclick="logoutAdmin(); closeAllModals();">
           Выйти из режима управления
@@ -1201,12 +1228,125 @@ function renderAuthStatus() {
       `;
     } else {
       settingsBadge.className = 'setup-badge neutral';
-      settingsBadge.textContent = '🔒 Только просмотр';
-      settingsDesc.textContent = 'Изменять статус и очередь может только Серёжа с секретным PIN-кодом.';
+      settingsBadge.textContent = '🔒 Настройки очереди';
+      settingsDesc.textContent = 'Менять порядок очереди и делать сброс может только Серёжа с секретным PIN-кодом.';
       settingsActions.innerHTML = `
         <button type="button" class="primary-action-btn" onclick="closeAllModals(); openAuthModal();">
           Ввести PIN-код 🔑
         </button>
+      `;
+    }
+  }
+}
+
+// ========================================================
+// PROFILE & DYNAMIC TURN UI RENDERING
+// ========================================================
+function renderProfileUI() {
+  const userProfile = getCurrentUserProfile();
+  const currentDuty = getCurrentDutyMember();
+  const isAdm = isAdmin();
+  const myMember = userProfile && state.members ? state.members[userProfile] : null;
+
+  // 1. Top nav profile badge
+  const profileAvatar = document.getElementById('profile-badge-avatar');
+  const profileName = document.getElementById('profile-badge-name');
+  const profileBtn = document.getElementById('btn-profile-badge');
+
+  if (profileAvatar && profileName) {
+    if (myMember) {
+      profileAvatar.textContent = myMember.avatar;
+      profileName.textContent = myMember.name;
+      if (profileBtn) profileBtn.title = `Ваш профиль: ${myMember.name}. Нажмите, чтобы сменить`;
+    } else {
+      profileAvatar.textContent = '👤';
+      profileName.textContent = 'Кто ты?';
+      if (profileBtn) profileBtn.title = 'Выберите свой профиль';
+    }
+  }
+
+  // 2. Personal duty status banner
+  const banner = document.getElementById('banner-duty-status');
+  const bannerIcon = document.getElementById('banner-status-icon');
+  const bannerTitle = document.getElementById('banner-status-title');
+  const bannerSub = document.getElementById('banner-status-sub');
+  const bannerBtn = document.getElementById('btn-banner-profile');
+
+  if (banner && bannerIcon && bannerTitle && bannerSub) {
+    if (!myMember) {
+      banner.className = 'duty-status-banner no-profile';
+      bannerIcon.textContent = '👤';
+      bannerTitle.textContent = 'Выберите свой профиль';
+      bannerSub.textContent = 'Отмечать помывку сможет только тот, чья сейчас очередь';
+      if (bannerBtn) bannerBtn.textContent = 'Выбрать 👤';
+    } else if (myMember.id === currentDuty.id) {
+      banner.className = 'duty-status-banner is-my-turn';
+      bannerIcon.textContent = '✨';
+      bannerTitle.textContent = `${myMember.name}, сейчас ваша очередь дежурить! 🧼`;
+      bannerSub.textContent = 'Помойте посуду и нажмите «Я помыл(а) посуду!» ниже';
+      if (bannerBtn) bannerBtn.textContent = 'Сменить 👤';
+    } else {
+      banner.className = 'duty-status-banner is-not-my-turn';
+      bannerIcon.textContent = '⏳';
+      bannerTitle.textContent = `Сейчас дежурит: ${currentDuty.name} ${currentDuty.avatar}`;
+      bannerSub.textContent = `Ваш черёд наступит позже. На этом телефоне доступен просмотр`;
+      if (bannerBtn) bannerBtn.textContent = 'Сменить 👤';
+    }
+  }
+
+  // 3. Highlight selected card in profile modal
+  document.querySelectorAll('.profile-select-card').forEach(card => {
+    const memId = card.getAttribute('data-member');
+    if (userProfile && memId === userProfile) {
+      card.classList.add('selected');
+    } else {
+      card.classList.remove('selected');
+    }
+  });
+
+  // 4. Wash button styling & text
+  const washBtn = document.getElementById('btn-wash-done');
+  if (washBtn) {
+    washBtn.classList.remove('btn-locked', 'btn-my-turn', 'btn-not-my-turn', 'btn-no-profile');
+
+    if (!userProfile && !isAdm) {
+      washBtn.classList.add('btn-no-profile');
+      washBtn.innerHTML = `
+        <span class="wash-icon">👤</span>
+        <div class="wash-label-box">
+          <span class="wash-title">КТО ПОМЫЛ ПОСУДУ?</span>
+          <span class="wash-sub">Нажмите, чтобы выбрать свой профиль 👤</span>
+        </div>
+      `;
+    } else if (userProfile === currentDuty.id) {
+      washBtn.classList.add('btn-my-turn');
+      const actionTitle = (myMember && myMember.id === 'mama') ? 'Я ПОМЫЛА ПОСУДУ!' : 'Я ПОМЫЛ ПОСУДУ!';
+      washBtn.innerHTML = `
+        <div class="wash-btn-shine"></div>
+        <span class="wash-icon">🧼</span>
+        <div class="wash-label-box">
+          <span class="wash-title">${actionTitle}</span>
+          <span class="wash-sub">Передать очередь дальше ✨</span>
+        </div>
+      `;
+    } else if (isAdm) {
+      washBtn.classList.add('btn-my-turn');
+      washBtn.innerHTML = `
+        <div class="wash-btn-shine"></div>
+        <span class="wash-icon">👑</span>
+        <div class="wash-label-box">
+          <span class="wash-title">ОТМЕТИТЬ ЗА: ${currentDuty.name.toUpperCase()}</span>
+          <span class="wash-sub">Режим управления (Серёжа) ✨</span>
+        </div>
+      `;
+    } else {
+      washBtn.classList.add('btn-not-my-turn');
+      washBtn.innerHTML = `
+        <span class="wash-icon">⏳</span>
+        <div class="wash-label-box">
+          <span class="wash-title">ДЕЖУРИТ: ${currentDuty.name.toUpperCase()}</span>
+          <span class="wash-sub">Отметить может только ${currentDuty.name} 🔒</span>
+        </div>
       `;
     }
   }
@@ -1444,6 +1584,40 @@ document.addEventListener('DOMContentLoaded', () => {
     settings.activeTab = 'tab-duty';
   }
 
+  // Profile badge in header
+  const btnProfileBadge = document.getElementById('btn-profile-badge');
+  if (btnProfileBadge) {
+    btnProfileBadge.addEventListener('click', () => {
+      openModal('modal-profile-select');
+      if (window.soundFx) soundFx.playClick();
+    });
+  }
+
+  // Profile button on duty banner
+  const btnBannerProfile = document.getElementById('btn-banner-profile');
+  if (btnBannerProfile) {
+    btnBannerProfile.addEventListener('click', () => {
+      openModal('modal-profile-select');
+      if (window.soundFx) soundFx.playClick();
+    });
+  }
+
+  // Profile cards in profile modal
+  document.querySelectorAll('.profile-select-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const memberId = card.getAttribute('data-member');
+      if (memberId) {
+        setCurrentUserProfile(memberId);
+        closeAllModals();
+        if (window.soundFx) soundFx.playVictory();
+        const mem = state.members[memberId];
+        if (mem) {
+          showToast(`Привет, ${mem.name}! Профиль сохранён на этом телефоне`, mem.avatar);
+        }
+      }
+    });
+  });
+
   // Auth button in header
   const btnAuthBadge = document.getElementById('btn-auth-badge');
   if (btnAuthBadge) {
@@ -1458,14 +1632,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Banner login button
-  const btnBannerLogin = document.getElementById('btn-banner-login');
-  if (btnBannerLogin) {
-    btnBannerLogin.addEventListener('click', () => {
-      openAuthModal();
-    });
-  }
-
   // Auth form submission
   const formAuth = document.getElementById('form-admin-auth');
   if (formAuth) {
@@ -1477,15 +1643,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Main Wash button
   document.getElementById('btn-wash-done').addEventListener('click', () => {
-    requireAdmin(() => handleWashDone());
+    const userProfile = getCurrentUserProfile();
+    const currentMember = getCurrentDutyMember();
+    const isAdm = isAdmin();
+
+    if (!userProfile && !isAdm) {
+      openModal('modal-profile-select');
+      return;
+    }
+
+    if (userProfile === currentMember.id || isAdm) {
+      handleWashDone();
+    } else {
+      showToast(`Сейчас дежурит ${currentMember.name}. Отметить может только он(а)!`, '⏳');
+      if (window.soundFx) soundFx.playPop();
+    }
   });
 
   // Undo button
   document.getElementById('btn-undo').addEventListener('click', () => {
-    requireAdmin(() => handleUndo());
+    handleUndo();
   });
 
-  // Turn Modifiers
+  // Turn Modifiers (Admin only)
   document.getElementById('btn-skip-duty').addEventListener('click', () => {
     requireAdmin(() => handleSkipTurn());
   });
@@ -1498,10 +1678,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Note Modal
   document.getElementById('btn-add-note').addEventListener('click', () => {
-    requireAdmin(() => {
+    const userProfile = getCurrentUserProfile();
+    const currentMember = getCurrentDutyMember();
+    const isAdm = isAdmin();
+
+    if (!userProfile && !isAdm) {
+      openModal('modal-profile-select');
+      return;
+    }
+
+    if (userProfile === currentMember.id || isAdm) {
       document.getElementById('modal-note-text').value = '';
       openModal('modal-note');
-    });
+    } else {
+      showToast(`Сейчас дежурит ${currentMember.name}!`, '⏳');
+      if (window.soundFx) soundFx.playPop();
+    }
   });
 
   document.querySelectorAll('.note-tag-btn').forEach(btn => {
@@ -1509,16 +1701,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const textarea = document.getElementById('modal-note-text');
       const tag = btn.getAttribute('data-tag');
       textarea.value = textarea.value ? `${textarea.value} ${tag}` : tag;
-      soundFx.playClick();
+      if (window.soundFx) soundFx.playClick();
     });
   });
 
   document.getElementById('btn-submit-note-wash').addEventListener('click', () => {
-    requireAdmin(() => {
-      const note = document.getElementById('modal-note-text').value;
-      closeAllModals();
-      handleWashDone(note);
-    });
+    const note = document.getElementById('modal-note-text').value;
+    closeAllModals();
+    handleWashDone(note);
   });
 
   // View all history button from Tab 1
@@ -1632,6 +1822,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initial render
   renderAll();
+
+  // If user hasn't selected their profile yet, prompt them gently on launch
+  if (!getCurrentUserProfile()) {
+    setTimeout(() => {
+      openModal('modal-profile-select');
+    }, 450);
+  }
 
   // Initialize Cloud Sync
   initCloudSync();

@@ -1,25 +1,25 @@
 #!/bin/bash
 # ========================================================
-# Быстрый скрипт для копирования и запуска на Raspberry Pi
+# Быстрый скрипт для обновления и перезапуска на Raspberry Pi
 # ========================================================
 
 RPI_IP="192.168.1.75"
-RPI_USER="${1:-pi}"
+RPI_USER="${1:-ggrk52}"
 
 echo "========================================================"
-echo "🚀 Отправка проекта на Raspberry Pi 5 ($RPI_USER@$RPI_IP)..."
+echo "🚀 Отправка обновления Чистая Тарелка 2.0 на Raspberry Pi ($RPI_USER@$RPI_IP)..."
 echo "========================================================"
 
-# Создаем папку на Raspberry Pi и копируем файлы
-ssh -o StrictHostKeyChecking=no "$RPI_USER@$RPI_IP" "mkdir -p ~/dish-tracker"
-scp -r * "$RPI_USER@$RPI_IP:~/dish-tracker/"
+# Копируем основные файлы сервера и веб-интерфейса
+scp index.html app.js style.css sw.js manifest.json server.py server.js "$RPI_USER@$RPI_IP:~/dish-tracker/"
+ssh "$RPI_USER@$RPI_IP" "mkdir -p ~/dish-tracker/public"
+scp index.html app.js style.css sw.js manifest.json "$RPI_USER@$RPI_IP:~/dish-tracker/public/"
 
 echo ""
-echo "✅ Все файлы успешно скопированы на Raspberry Pi!"
+echo "🔄 Перезапуск службы dish-tracker..."
+ssh "$RPI_USER@$RPI_IP" "sudo systemctl restart dish-tracker"
+
 echo ""
-echo "Для запуска выполните:"
-echo "👉 ssh $RPI_USER@$RPI_IP 'cd ~/dish-tracker && node server.js'"
-echo ""
-echo "Адрес в домашней сети будет:"
-echo "👉 http://$RPI_IP:8080"
+echo "✅ Обновление успешно установлено на Raspberry Pi 5!"
+echo "👉 Адрес: http://$RPI_IP:8080"
 echo "========================================================"

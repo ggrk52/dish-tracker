@@ -141,14 +141,46 @@ const server = http.createServer((req, res) => {
         }
 
         const cleanPass = (authPass || '').trim().toLowerCase().replace(/ё/g, 'е');
-        if (cleanPass !== '525252' && cleanPass !== 'мамамолодец') {
-          res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ error: "Требуется секретный PIN-код администратора" }));
-          return;
+        const isAdmin = (cleanPass === '525252' || cleanPass === 'мамамолодец');
+
+        // Check requesting member
+        let reqMember = req.headers['x-member-id'] || '';
+        if (reqMember) {
+          try { reqMember = decodeURIComponent(reqMember); } catch (e) {}
+        }
+        if (!reqMember && parsedState && parsedState._memberId) {
+          reqMember = parsedState._memberId;
         }
 
-        if (parsedState && parsedState._adminPassword) {
+        if (!isAdmin) {
+          const currentState = getOrCreateState();
+          const currQ = currentState.queue || [];
+          const currIdx = currentState.currentQueueIndex || 0;
+          const currDutyId = currQ[currIdx];
+
+          // 1. Changing queue order requires Admin PIN
+          if (JSON.stringify(parsedState.queue) !== JSON.stringify(currQ)) {
+            res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: "Изменять порядок очереди может только Серёжа с PIN-кодом" }));
+            return;
+          }
+
+          // 2. Only current duty member can mark duty as done, react or undo
+          const isDutyWash = (reqMember && currDutyId && reqMember === currDutyId);
+          const isReaction = (parsedState._action === 'reaction');
+          const isUndo = (parsedState._action === 'undo');
+
+          if (!isDutyWash && !isReaction && !isUndo) {
+            res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: "Отметить помывку может только тот, чья сегодня очередь" }));
+            return;
+          }
+        }
+
+        if (parsedState && typeof parsedState === 'object') {
           delete parsedState._adminPassword;
+          delete parsedState._memberId;
+          delete parsedState._action;
         }
 
         if (parsedState && parsedState.queue) {

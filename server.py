@@ -105,18 +105,51 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                     auth_pass = state_data.get("_adminPassword", "")
 
                 clean_pass = (auth_pass or "").strip().lower().replace("ё", "е")
-                if clean_pass not in ["525252", "мамамолодец"]:
-                    err_body = json.dumps({"error": "Требуется секретный PIN-код администратора"}).encode("utf-8")
-                    self.send_response(403)
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.send_header("Content-Length", str(len(err_body)))
-                    self.end_headers()
-                    self.wfile.write(err_body)
-                    return
+                is_admin = (clean_pass in ["525252", "мамамолодец"])
 
-                # Remove temporary auth field before persisting
-                if isinstance(state_data, dict) and "_adminPassword" in state_data:
-                    del state_data["_adminPassword"]
+                # Check requesting member
+                req_member = self.headers.get("X-Member-Id", "")
+                if req_member:
+                    from urllib.parse import unquote
+                    req_member = unquote(req_member)
+                if not req_member and isinstance(state_data, dict):
+                    req_member = state_data.get("_memberId", "")
+
+                if not is_admin:
+                    curr_state = get_or_create_state()
+                    curr_q = curr_state.get("queue", [])
+                    curr_idx = curr_state.get("currentQueueIndex", 0)
+                    curr_duty_id = curr_q[curr_idx] if curr_q and curr_idx < len(curr_q) else None
+
+                    # 1. Changing queue order requires Admin PIN
+                    if state_data.get("queue") != curr_q:
+                        err_body = json.dumps({"error": "Изменять порядок очереди может только Серёжа с PIN-кодом"}).encode("utf-8")
+                        self.send_response(403)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.send_header("Content-Length", str(len(err_body)))
+                        self.end_headers()
+                        self.wfile.write(err_body)
+                        return
+
+                    # 2. Only the current duty member can mark duty as done, react or undo
+                    is_duty_wash = (req_member and curr_duty_id and req_member == curr_duty_id)
+                    is_reaction = (isinstance(state_data, dict) and state_data.get("_action") == "reaction")
+                    is_undo = (isinstance(state_data, dict) and state_data.get("_action") == "undo")
+
+                    if not is_duty_wash and not is_reaction and not is_undo:
+                        err_body = json.dumps({"error": "Отметить помывку может только тот, чья сегодня очередь"}).encode("utf-8")
+                        self.send_response(403)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.send_header("Content-Length", str(len(err_body)))
+                        self.end_headers()
+                        self.wfile.write(err_body)
+                        return
+
+                # Remove temporary auth fields before persisting
+                if isinstance(state_data, dict):
+                    state_data.pop("_adminPassword", None)
+                    state_data.pop("_memberId", None)
+                    state_data.pop("_action", None)
 
                 save_state(state_data)
                 res_body = json.dumps({"success": True}).encode("utf-8")

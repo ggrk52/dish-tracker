@@ -35,19 +35,23 @@
       </div>
       
       <div class="top-actions">
-        <button id="btn-auth-badge" class="nav-icon-btn auth-badge-btn" title="Управление (Серёжа)" aria-label="Права доступа">
+        <!-- Profile Selector Button in Header -->
+        <button id="btn-profile-badge" class="profile-pill-btn" type="button" title="Сменить профиль">
+          <span id="profile-badge-avatar" class="profile-pill-avatar">👤</span>
+          <span id="profile-badge-name" class="profile-pill-name">Кто ты?</span>
+          <span class="profile-pill-arrow">▾</span>
+        </button>
+
+        <button id="btn-auth-badge" class="nav-icon-btn auth-badge-btn" type="button" title="Управление (Серёжа)" aria-label="Права доступа">
           <span id="auth-badge-icon" class="btn-icon">🔒</span>
         </button>
-        <button id="btn-sound" class="nav-icon-btn" title="Звуки" aria-label="Звуки">
+        <button id="btn-sound" class="nav-icon-btn" type="button" title="Звуки" aria-label="Звуки">
           <span class="btn-icon">🔊</span>
         </button>
-        <button id="btn-wake" class="nav-icon-btn" title="Не гасить экран на кухне" aria-label="Не гасить экран">
-          <span class="btn-icon">💡</span>
-        </button>
-        <button id="btn-theme" class="nav-icon-btn" title="Сменить тему" aria-label="Сменить тему">
+        <button id="btn-theme" class="nav-icon-btn" type="button" title="Сменить тему" aria-label="Сменить тему">
           <span class="btn-icon">🌙</span>
         </button>
-        <button id="btn-menu" class="nav-icon-btn" title="Настройки" aria-label="Настройки">
+        <button id="btn-menu" class="nav-icon-btn" type="button" title="Настройки" aria-label="Настройки">
           <span class="btn-icon">☰</span>
         </button>
       </div>
@@ -69,13 +73,16 @@
       <!-- TAB 1: DUTY / ДЕЖУРСТВО                    -->
       <!-- ========================================== -->
       <section id="tab-duty" class="tab-view active">
-        <!-- Read-Only Notice (Visible on non-admin phones) -->
-        <div id="banner-readonly" class="readonly-banner hidden">
-          <div class="readonly-banner-content">
-            <span class="readonly-icon">🔒</span>
-            <span class="readonly-text"><b>Режим просмотра:</b> переключать очередь может только Серёжа.</span>
+        <!-- Personal Duty Status Banner -->
+        <div id="banner-duty-status" class="duty-status-banner">
+          <div class="banner-status-content">
+            <span id="banner-status-icon" class="banner-status-icon">👤</span>
+            <div class="banner-status-text-box">
+              <span id="banner-status-title" class="banner-status-title">Выберите свой профиль</span>
+              <span id="banner-status-sub" class="banner-status-sub">Отмечать помывку сможет только тот, чья сегодня очередь</span>
+            </div>
           </div>
-          <button id="btn-banner-login" class="readonly-login-btn">Войти 🔑</button>
+          <button id="btn-banner-profile" class="banner-action-btn" type="button">Выбрать 👤</button>
         </div>
 
         <!-- Main Hero Card: Current Duty -->
@@ -408,6 +415,58 @@
           Войти в режим управления 🔓
         </button>
       </form>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: Profile Selection (Кто ты?)          -->
+  <!-- ========================================== -->
+  <div id="modal-profile-select" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>👤 Выберите свой профиль</h3>
+        <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
+      </div>
+      <p class="modal-sub">
+        Кто пользуется этим телефоном? Вы сможете отмечать мытьё посуды в свою очередь:
+      </p>
+      <div class="profile-select-grid" id="profile-select-grid">
+        <button type="button" class="profile-select-card" data-member="mama">
+          <span class="profile-card-avatar">👩</span>
+          <div class="profile-card-info">
+            <span class="profile-card-name">Мама</span>
+            <span class="profile-card-role">Главная хранительница уюта</span>
+          </div>
+          <span class="profile-card-check">✓</span>
+        </button>
+        <button type="button" class="profile-select-card" data-member="papa">
+          <span class="profile-card-avatar">👨</span>
+          <div class="profile-card-info">
+            <span class="profile-card-name">Папа</span>
+            <span class="profile-card-role">Мастер чистой посуды</span>
+          </div>
+          <span class="profile-card-check">✓</span>
+        </button>
+        <button type="button" class="profile-select-card" data-member="serezha">
+          <span class="profile-card-avatar">👦</span>
+          <div class="profile-card-info">
+            <span class="profile-card-name">Серёжа</span>
+            <span class="profile-card-role">Администратор и дежурный</span>
+          </div>
+          <span class="profile-card-check">✓</span>
+        </button>
+        <button type="button" class="profile-select-card" data-member="vasya">
+          <span class="profile-card-avatar">🧒</span>
+          <div class="profile-card-info">
+            <span class="profile-card-name">Вася</span>
+            <span class="profile-card-role">Быстрый мойщик</span>
+          </div>
+          <span class="profile-card-check">✓</span>
+        </button>
+      </div>
+      <p style="margin-top: 14px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">
+        Выбранный профиль сохранится на этом телефоне. Сменить можно в любой момент, нажав на имя вверху.
+      </p>
     </div>
   </div>
 
