@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dish-duty-v6';
+const CACHE_NAME = 'dish-duty-v7';
 const ASSETS = [
   './',
   './index.html',

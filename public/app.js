@@ -336,6 +336,49 @@ class SoundEngine {
     osc.start(now);
     osc.stop(now + 0.05);
   }
+
+  playWash() {
+    if (!settings.sound) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    [420, 580, 720, 960].forEach((startFreq, i) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const st = now + i * 0.05;
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(startFreq, st);
+      osc.frequency.exponentialRampToValueAtTime(startFreq * 1.6, st + 0.1);
+
+      gain.gain.setValueAtTime(0.2, st);
+      gain.gain.exponentialRampToValueAtTime(0.001, st + 0.12);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(st);
+      osc.stop(st + 0.13);
+    });
+  }
+
+  playHaptic(style = 'light') {
+    if (!('vibrate' in navigator)) return;
+    try {
+      if (style === 'light') {
+        navigator.vibrate(12);
+      } else if (style === 'medium') {
+        navigator.vibrate(28);
+      } else if (style === 'success') {
+        navigator.vibrate([25, 40, 30]);
+      } else if (style === 'error') {
+        navigator.vibrate([40, 30, 40]);
+      }
+    } catch (e) {
+      // Ignore vibration error
+    }
+  }
 }
 
 const soundFx = new SoundEngine();
@@ -704,14 +747,16 @@ function handleWashDone(note = '') {
   renderAll();
 
   // Celebratory FX & Audio
-  if (window.soundFx) soundFx.playVictory();
+  if (window.soundFx) {
+    soundFx.playWash();
+    soundFx.playVictory();
+    soundFx.playHaptic('success');
+  }
   if (window.celebration) celebration.burst(currentMember.color);
 
   // Show Toast
   const verb = (currentMember.id === 'mama') ? 'помыла' : 'помыл';
   showUndoToast(`${currentMember.name} ${verb} посуду! Отлично! 🧼`);
-
-  if ('vibrate' in navigator) navigator.vibrate([60, 40, 100]);
 }
 
 function handleUndo() {
@@ -797,19 +842,31 @@ function renderDutyTab() {
   const heroCard = document.getElementById('duty-hero');
   const heroAvatar = document.getElementById('hero-avatar');
   const heroName = document.getElementById('hero-name');
+  const heroRoleTitle = document.getElementById('hero-role-title');
   const heroTimer = document.getElementById('hero-timer');
   const heroStreak = document.getElementById('hero-streak');
   const heroAura = document.getElementById('hero-aura');
 
-  heroAvatar.textContent = current.avatar;
-  heroName.textContent = current.name;
-  heroName.style.color = current.color;
-  heroAura.style.borderColor = current.color;
-  heroCard.style.borderColor = `${current.color}40`;
+  if (heroAvatar) heroAvatar.textContent = current.avatar;
+  if (heroName) {
+    heroName.textContent = current.name;
+    heroName.style.color = current.color;
+  }
+  if (heroRoleTitle) {
+    heroRoleTitle.textContent = current.title || 'Член семьи';
+  }
+  if (heroAura) {
+    heroAura.style.borderTopColor = current.color;
+    heroAura.style.borderRightColor = current.color;
+  }
+  if (heroCard) {
+    heroCard.style.setProperty('--primary-glow', `${current.color}66`);
+    heroCard.style.borderColor = `${current.color}45`;
+  }
 
-  heroTimer.textContent = formatDutyDuration(state.dutyStartedAt);
+  if (heroTimer) heroTimer.textContent = `⏱️ ${formatDutyDuration(state.dutyStartedAt)}`;
   const totalMemberWashes = state.stats[current.id] || 0;
-  heroStreak.textContent = `Помыто: ${totalMemberWashes}`;
+  if (heroStreak) heroStreak.textContent = `🧼 Помыто: ${totalMemberWashes}`;
 
   // Queue track
   renderQueueTrack();
@@ -831,7 +888,7 @@ function renderQueueTrack() {
 
     let label = 'В очереди';
     if (isActive) label = 'Сейчас 🧼';
-    else if (isNext) label = 'Следующий';
+    else if (isNext) label = 'Следующий 🔔';
 
     const card = document.createElement('div');
     card.className = `queue-card ${isActive ? 'active' : ''}`;
@@ -844,6 +901,7 @@ function renderQueueTrack() {
 
     card.addEventListener('click', () => {
       soundFx.playClick();
+      soundFx.playHaptic('light');
     });
 
     track.appendChild(card);
@@ -977,9 +1035,11 @@ function renderStats() {
   const container = document.getElementById('leaderboard-list');
   const totalBadge = document.getElementById('stat-total-badge');
   const awardsContainer = document.getElementById('awards-grid');
+  const podiumContainer = document.getElementById('podium-container');
+  const shareBox = document.getElementById('duty-share-box');
 
-  container.innerHTML = '';
-  awardsContainer.innerHTML = '';
+  if (container) container.innerHTML = '';
+  if (awardsContainer) awardsContainer.innerHTML = '';
 
   const memberList = Object.values(state.members).map(m => ({
     ...m,
@@ -990,8 +1050,67 @@ function renderStats() {
   memberList.sort((a, b) => b.count - a.count);
 
   const totalWashes = memberList.reduce((sum, m) => sum + m.count, 0);
-  totalBadge.textContent = `Всего: ${totalWashes} ${pluralize(totalWashes, 'мойка', 'мойки', 'моек')}`;
+  if (totalBadge) {
+    totalBadge.textContent = `Всего: ${totalWashes} ${pluralize(totalWashes, 'мойка', 'мойки', 'моек')}`;
+  }
 
+  // 1. Render 3D Podium for Top 3
+  if (podiumContainer) {
+    podiumContainer.innerHTML = '';
+    if (memberList.length >= 3 && totalWashes > 0) {
+      const top1 = memberList[0];
+      const top2 = memberList[1];
+      const top3 = memberList[2];
+
+      const podiumOrder = [
+        { member: top2, rank: 2, medal: '🥈', label: '2 место' },
+        { member: top1, rank: 1, medal: '🥇', label: '1 место' },
+        { member: top3, rank: 3, medal: '🥉', label: '3 место' }
+      ];
+
+      podiumOrder.forEach(item => {
+        const m = item.member;
+        const step = document.createElement('div');
+        step.className = `podium-step rank-${item.rank}`;
+        step.innerHTML = `
+          <div class="podium-avatar-wrap">
+            ${item.rank === 1 ? '<span class="podium-crown">👑</span>' : ''}
+            <div class="podium-avatar" style="border-color:${m.color}">${m.avatar}</div>
+          </div>
+          <div class="podium-name">${m.name}</div>
+          <div class="podium-count">${m.count} ${pluralize(m.count, 'мойка', 'мойки', 'моек')}</div>
+          <div class="podium-pillar" style="color:${m.color}">${item.medal}</div>
+        `;
+        podiumContainer.appendChild(step);
+      });
+    }
+  }
+
+  // 2. Render Duty Distribution Share Bar
+  if (shareBox) {
+    if (totalWashes > 0) {
+      let segmentsHtml = '';
+      memberList.forEach(m => {
+        const pct = Math.round((m.count / totalWashes) * 100);
+        if (pct > 0) {
+          segmentsHtml += `<div class="share-segment" style="width:${pct}%; background-color:${m.color};" title="${m.name}: ${pct}%"></div>`;
+        }
+      });
+      shareBox.innerHTML = `
+        <div class="duty-share-title">
+          <span>Вклад семьи в чистую кухню</span>
+          <span>100%</span>
+        </div>
+        <div class="duty-share-bar">
+          ${segmentsHtml}
+        </div>
+      `;
+    } else {
+      shareBox.innerHTML = '';
+    }
+  }
+
+  // 3. Render Detailed Leaderboard List
   const medals = ['🥇', '🥈', '🥉', '✨'];
   const maxWashes = memberList[0]?.count || 1;
 
@@ -1004,7 +1123,7 @@ function renderStats() {
     row.innerHTML = `
       <div class="leader-bg-bar" style="width: ${barWidth}%; background-color: ${m.color}"></div>
       <div class="leader-item-left">
-        <span class="leader-medal">${medals[idx]}</span>
+        <span class="leader-medal">${medals[idx] || '✨'}</span>
         <span class="leader-avatar-box">${m.avatar}</span>
         <div class="leader-title-box">
           <span class="leader-person-name">${m.name}</span>
@@ -1016,7 +1135,7 @@ function renderStats() {
         <span class="leader-washes-pct">${percent}% от всех</span>
       </div>
     `;
-    container.appendChild(row);
+    if (container) container.appendChild(row);
   });
 
   // Calculate Family Awards
@@ -1032,28 +1151,30 @@ function renderStats() {
   let mostLovedMemberId = Object.keys(reactionCounts).reduce((a, b) => reactionCounts[a] > reactionCounts[b] ? a : b, 'mama');
   const mostLoved = reactionCounts[mostLovedMemberId] > 0 ? state.members[mostLovedMemberId] : null;
 
-  awardsContainer.innerHTML = `
-    <div class="award-box">
-      <span class="award-icon">🍳</span>
-      <span class="award-name">Гроза сковородок</span>
-      <span class="award-winner">${topWasher ? `${topWasher.name} (${topWasher.count} раз)` : 'Пока никто'}</span>
-    </div>
-    <div class="award-box">
-      <span class="award-icon">💖</span>
-      <span class="award-name">Любимчик кухни</span>
-      <span class="award-winner">${mostLoved ? `${mostLoved.name} (${reactionCounts[mostLovedMemberId]} ❤️)` : 'Ждёт реакций'}</span>
-    </div>
-    <div class="award-box">
-      <span class="award-icon">🧼</span>
-      <span class="award-name">Чистюля недели</span>
-      <span class="award-winner">${topWasher ? topWasher.name : 'Вся семья'}</span>
-    </div>
-    <div class="award-box">
-      <span class="award-icon">🌟</span>
-      <span class="award-name">Мастер блеска</span>
-      <span class="award-winner">Мама & Папа & Дети</span>
-    </div>
-  `;
+  if (awardsContainer) {
+    awardsContainer.innerHTML = `
+      <div class="award-box">
+        <span class="award-icon">🍳</span>
+        <span class="award-name">Гроза сковородок</span>
+        <span class="award-winner">${topWasher ? `${topWasher.name} (${topWasher.count} раз)` : 'Пока никто'}</span>
+      </div>
+      <div class="award-box">
+        <span class="award-icon">💖</span>
+        <span class="award-name">Любимчик кухни</span>
+        <span class="award-winner">${mostLoved ? `${mostLoved.name} (${reactionCounts[mostLovedMemberId]} ❤️)` : 'Ждёт реакций'}</span>
+      </div>
+      <div class="award-box">
+        <span class="award-icon">🧼</span>
+        <span class="award-name">Чистюля недели</span>
+        <span class="award-winner">${topWasher ? topWasher.name : 'Вся семья'}</span>
+      </div>
+      <div class="award-box">
+        <span class="award-icon">🌟</span>
+        <span class="award-name">Мастер блеска</span>
+        <span class="award-winner">Мама & Папа & Дети</span>
+      </div>
+    `;
+  }
 }
 
 // ========================================================
@@ -1345,7 +1466,20 @@ function renderProfileUI() {
       banner.className = 'duty-status-banner is-not-my-turn';
       bannerIcon.textContent = '⏳';
       bannerTitle.textContent = `Сейчас дежурит: ${currentDuty.name} ${currentDuty.avatar}`;
-      bannerSub.textContent = `Ваш черёд наступит позже (${user.name}). На этом телефоне доступен просмотр`;
+
+      const userQueueIdx = state.queue.indexOf(user.username);
+      let turnsRemaining = -1;
+      if (userQueueIdx !== -1) {
+        turnsRemaining = (userQueueIdx - state.currentQueueIndex + state.queue.length) % state.queue.length;
+      }
+
+      if (turnsRemaining === 1) {
+        bannerSub.textContent = `🔔 Вы следующий(ая) в очереди! Приготовьтесь после ${currentDuty.name}`;
+      } else if (turnsRemaining > 1) {
+        bannerSub.textContent = `Ваш черёд через ${turnsRemaining} ${pluralize(turnsRemaining, 'смену', 'смены', 'смен')}. На этом телефоне доступен просмотр`;
+      } else {
+        bannerSub.textContent = `Ваш черёд наступит позже (${user.name}). На этом телефоне доступен просмотр`;
+      }
       if (bannerBtn) bannerBtn.textContent = 'Мой профиль 👤';
     }
   }
@@ -1372,7 +1506,7 @@ function renderProfileUI() {
         <span class="wash-icon">🧼</span>
         <div class="wash-label-box">
           <span class="wash-title">${actionTitle}</span>
-          <span class="wash-sub">Передать очередь дальше ✨</span>
+          <span class="wash-sub">Передать очередь дальше ✨ (+1 к рейтингу)</span>
         </div>
       `;
     } else if (isAdm) {
@@ -1387,11 +1521,17 @@ function renderProfileUI() {
       `;
     } else {
       washBtn.classList.add('btn-locked', 'btn-not-my-turn');
+      const userQueueIdx = state.queue.indexOf(user.username);
+      let turnsRemaining = -1;
+      if (userQueueIdx !== -1) {
+        turnsRemaining = (userQueueIdx - state.currentQueueIndex + state.queue.length) % state.queue.length;
+      }
+      const subMsg = (turnsRemaining === 1) ? '🔔 Вы следующий(ая) в очереди!' : `Отметить может только ${currentDuty.name} 🔒`;
       washBtn.innerHTML = `
         <span class="wash-icon">⏳</span>
         <div class="wash-label-box">
           <span class="wash-title">ДЕЖУРИТ: ${currentDuty.name.toUpperCase()}</span>
-          <span class="wash-sub">Отметить может только ${currentDuty.name} 🔒</span>
+          <span class="wash-sub">${subMsg}</span>
         </div>
       `;
     }
@@ -1602,6 +1742,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.tab-item').forEach(tabBtn => {
     tabBtn.addEventListener('click', () => {
       soundFx.playClick();
+      soundFx.playHaptic('light');
       const targetTabId = tabBtn.getAttribute('data-tab');
 
       // Update buttons
