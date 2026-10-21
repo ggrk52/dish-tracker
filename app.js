@@ -1701,23 +1701,22 @@ async function toggleWakeLock() {
 // ========================================================
 document.addEventListener('DOMContentLoaded', () => {
   // Theme init
-  if (settings.theme === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    document.getElementById('btn-theme').querySelector('.btn-icon').textContent = '☀️';
+  const currentTheme = settings.theme || 'dark';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+  const themeBtnIcon = document.getElementById('btn-theme')?.querySelector('.btn-icon');
+  if (themeBtnIcon) {
+    themeBtnIcon.textContent = (currentTheme === 'dark') ? '☀️' : '🌙';
   }
 
   // Theme switch button
   document.getElementById('btn-theme').addEventListener('click', () => {
     soundFx.playClick();
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    if (isDark) {
-      document.documentElement.removeAttribute('data-theme');
-      settings.theme = 'light';
-      document.getElementById('btn-theme').querySelector('.btn-icon').textContent = '🌙';
-    } else {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      settings.theme = 'dark';
-      document.getElementById('btn-theme').querySelector('.btn-icon').textContent = '☀️';
+    const newTheme = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    settings.theme = newTheme;
+    if (themeBtnIcon) {
+      themeBtnIcon.textContent = (newTheme === 'dark') ? '☀️' : '🌙';
     }
     saveSettings();
   });
