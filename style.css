@@ -154,10 +154,42 @@ body::before {
 .app-layout {
   width: 100%;
   max-width: 620px;
-  padding: 16px 20px;
+  padding: 16px 20px 32px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* ========================================================
+   MAIN CONTENT & TAB VIEWS
+   ======================================================== */
+.main-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-view {
+  display: none !important;
+  width: 100%;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.tab-view.active {
+  display: flex !important;
+  animation: tabFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tabFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ========================================================
@@ -1290,10 +1322,47 @@ body::before {
   align-items: flex-end;
   justify-content: center;
   gap: 12px;
-  padding: 24px 0 0;
+  padding: 16px 0 0;
   margin-bottom: 24px;
   border-bottom: 2px solid var(--line-strong);
   position: relative;
+  min-height: 120px;
+}
+
+.podium-empty-box {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+  text-align: center;
+  background: var(--surface-subtle);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+
+.podium-empty-icon {
+  font-size: 2.4rem;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 2px 8px var(--shadow));
+}
+
+.podium-empty-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--ink-strong);
+  margin-bottom: 4px;
+}
+
+.podium-empty-sub {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  max-width: 320px;
+  line-height: 1.4;
 }
 
 .podium-step {

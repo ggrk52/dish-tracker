@@ -821,53 +821,52 @@ function handleReaction(historyId, reactionType) {
 }
 
 // ========================================================
-// RENDERING (Lazy Tab Evaluation + DOM Micro-Diffing)
+// RENDERING & TAB SWITCHING ENGINE
 // ========================================================
-const dirtyTabs = {
-  'tab-duty': true,
-  'tab-history': true,
-  'tab-stats': true
-};
+function switchTab(targetTabId, shouldScroll = true) {
+  if (!targetTabId || !document.getElementById(targetTabId)) {
+    targetTabId = 'tab-duty';
+  }
 
-function markTabsDirty() {
-  dirtyTabs['tab-duty'] = true;
-  dirtyTabs['tab-history'] = true;
-  dirtyTabs['tab-stats'] = true;
-}
+  // Update nav buttons in bottom dock
+  document.querySelectorAll('.tab-item').forEach(b => {
+    const isTarget = b.getAttribute('data-tab') === targetTabId;
+    b.classList.toggle('active', isTarget);
+  });
 
-function renderActiveTab() {
-  renderAuthStatus();
-  const currentTab = settings.activeTab || 'tab-duty';
+  // Update tab views
+  document.querySelectorAll('.tab-view').forEach(view => {
+    const isTarget = view.id === targetTabId;
+    view.classList.toggle('active', isTarget);
+  });
 
-  if (currentTab === 'tab-duty') {
-    if (dirtyTabs['tab-duty']) {
-      renderDutyTab();
-      renderProfileUI();
-      dirtyTabs['tab-duty'] = false;
-    }
-  } else if (currentTab === 'tab-history') {
-    if (dirtyTabs['tab-history']) {
-      renderHistory();
-      dirtyTabs['tab-history'] = false;
-    }
-  } else if (currentTab === 'tab-stats') {
-    if (dirtyTabs['tab-stats']) {
-      renderStats();
-      dirtyTabs['tab-stats'] = false;
-    }
+  settings.activeTab = targetTabId;
+  saveSettings();
+
+  // Re-render active tab and ensure all views are fresh
+  renderAll();
+
+  if (shouldScroll) {
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
 }
 
+function renderActiveTab() {
+  renderAll();
+}
+
 function renderAll() {
-  markTabsDirty();
-  renderActiveTab();
+  renderAuthStatus();
+  renderProfileUI();
+  renderDutyTab();
+  renderHistory();
+  renderStats();
 }
 
 let lastRenderedQueueHash = '';
 
 function renderDutyTab() {
   const current = getCurrentDutyMember();
-  dirtyTabs['tab-duty'] = false;
 
   // Hero components
   const heroCard = document.getElementById('duty-hero');
@@ -1000,7 +999,6 @@ function renderHistory() {
   const timeline = document.getElementById('history-timeline');
   if (!timeline) return;
   timeline.innerHTML = '';
-  dirtyTabs['tab-history'] = false;
 
   // Filter history
   let filtered = state.history || [];
@@ -1121,7 +1119,6 @@ function renderHistory() {
 
 // Render Tab 3: Stats & Awards
 function renderStats() {
-  dirtyTabs['tab-stats'] = false;
   const container = document.getElementById('leaderboard-list');
   const totalBadge = document.getElementById('stat-total-badge');
   const awardsContainer = document.getElementById('awards-grid');
@@ -1131,9 +1128,10 @@ function renderStats() {
   if (container) container.innerHTML = '';
   if (awardsContainer) awardsContainer.innerHTML = '';
 
-  const memberList = Object.values(state.members).map(m => ({
+  const stats = state.stats || {};
+  const memberList = Object.values(state.members || DEFAULT_STATE.members).map(m => ({
     ...m,
-    count: state.stats[m.id] || 0
+    count: stats[m.id] || 0
   }));
 
   // Sort descending
@@ -1173,6 +1171,14 @@ function renderStats() {
         `;
         podiumContainer.appendChild(step);
       });
+    } else {
+      podiumContainer.innerHTML = `
+        <div class="podium-empty-box">
+          <span class="podium-empty-icon">🏆</span>
+          <div class="podium-empty-title">Пьедестал почёта</div>
+          <div class="podium-empty-sub">Здесь появятся лидеры, как только семья начнёт отмечать помытую посуду!</div>
+        </div>
+      `;
     }
   }
 
@@ -1196,7 +1202,15 @@ function renderStats() {
         </div>
       `;
     } else {
-      shareBox.innerHTML = '';
+      shareBox.innerHTML = `
+        <div class="duty-share-title">
+          <span>Вклад семьи в чистую кухню</span>
+          <span>0%</span>
+        </div>
+        <div class="duty-share-bar">
+          <div class="share-segment empty" style="width:100%; background:var(--line-strong);" title="Ожидание первых моек"></div>
+        </div>
+      `;
     }
   }
 
@@ -1874,24 +1888,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Bottom Tab Navigation
   document.querySelectorAll('.tab-item').forEach(tabBtn => {
-    tabBtn.addEventListener('click', () => {
+    tabBtn.addEventListener('click', (e) => {
+      e.preventDefault();
       soundFx.playClick();
       soundFx.playHaptic('light');
       const targetTabId = tabBtn.getAttribute('data-tab');
-
-      // Update buttons
-      document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
-      tabBtn.classList.add('active');
-
-      // Update tab views
-      document.querySelectorAll('.tab-view').forEach(view => view.classList.remove('active'));
-      const activeView = document.getElementById(targetTabId);
-      if (activeView) activeView.classList.add('active');
-
-      settings.activeTab = targetTabId;
-      saveSettings();
-      renderActiveTab();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      switchTab(targetTabId, true);
     });
   });
 
@@ -1904,10 +1906,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Ensure active tab exists
+  // Ensure active tab exists and sync initial UI
   if (!document.getElementById(settings.activeTab)) {
     settings.activeTab = 'tab-duty';
   }
+  switchTab(settings.activeTab, false);
 
   // Account badge in header
   const btnAccountBadge = document.getElementById('btn-account-badge');
