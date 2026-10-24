@@ -29,12 +29,32 @@
     <!-- Top Navigation Bar -->
     <header class="top-nav">
       <div class="brand">
-        <span class="brand-icon">🍽️</span>
-        <div>
-          <h1 class="brand-title">Чистая Тарелка</h1>
+        <div class="brand-logo-mark">
+          <svg class="brand-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" stroke="url(#brandGrad)" stroke-width="2" stroke-dasharray="3 3"/>
+            <circle cx="16" cy="16" r="9" fill="url(#plateGrad)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+            <path d="M12 16.5L14.8 19.3L20.5 13.5" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="brandGrad" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#f0642f"/>
+                <stop offset="0.5" stop-color="#f59e0b"/>
+                <stop offset="1" stop-color="#10b981"/>
+              </linearGradient>
+              <linearGradient id="plateGrad" x1="7" y1="7" x2="25" y2="25" gradientUnits="userSpaceOnUse">
+                <stop stop-color="rgba(255,255,255,0.18)"/>
+                <stop offset="1" stop-color="rgba(255,255,255,0.04)"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text-block">
+          <div class="brand-title-wrap">
+            <h1 class="brand-title">Чистая Тарелка</h1>
+            <span class="brand-pro-badge">PRO</span>
+          </div>
           <div class="cloud-indicator" id="cloud-indicator">
             <span class="cloud-dot"></span>
-            <span class="cloud-status-label" id="cloud-status-label">Локально</span>
+            <span class="cloud-status-label" id="cloud-status-label">Raspberry Pi 5 🟢</span>
           </div>
         </div>
       </div>
@@ -89,12 +109,15 @@
 
         <!-- Main Hero Card: Current Duty -->
         <div class="duty-hero-card" id="duty-hero">
+          <div class="hero-ambient-glow" id="hero-ambient-glow"></div>
+
           <div class="duty-status-badge">
             <span class="pulsing-circle"></span>
             <span id="hero-badge-title">СЕЙЧАС ДЕЖУРНЫЙ</span>
           </div>
 
           <div class="duty-avatar-box">
+            <div class="avatar-aura-outer"></div>
             <div class="avatar-aura" id="hero-aura"></div>
             <div class="hero-avatar" id="hero-avatar">👩</div>
           </div>
@@ -202,7 +225,10 @@
               <h2 class="card-title-large">🏆 Доска почёта</h2>
               <p class="card-subtitle">Кто в нашей семье чаще всех моет посуду</p>
             </div>
-            <span class="stats-badge-total" id="stat-total-badge">Всего: 0 моек</span>
+            <div class="stats-header-actions">
+              <button id="btn-share-family-report" class="pill-btn highlight-pill" type="button" title="Скопировать отчет для Telegram">📤 Поделиться</button>
+              <span class="stats-badge-total" id="stat-total-badge">Всего: 0 моек</span>
+            </div>
           </div>
 
           <!-- 3D Podium for Top 3 -->

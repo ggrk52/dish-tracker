@@ -926,6 +926,7 @@ function renderDutyTab() {
 
   // Hero components
   const heroCard = document.getElementById('duty-hero');
+  const heroAmbientGlow = document.getElementById('hero-ambient-glow');
   const heroAvatar = document.getElementById('hero-avatar');
   const heroName = document.getElementById('hero-name');
   const heroRoleTitle = document.getElementById('hero-role-title');
@@ -933,6 +934,9 @@ function renderDutyTab() {
   const heroStreak = document.getElementById('hero-streak');
   const heroAura = document.getElementById('hero-aura');
 
+  if (heroAmbientGlow) {
+    heroAmbientGlow.style.background = `radial-gradient(circle at 50% 30%, ${current.color}35 0%, transparent 70%)`;
+  }
   if (heroAvatar && heroAvatar.textContent !== current.avatar) {
     heroAvatar.textContent = current.avatar;
   }
@@ -989,13 +993,19 @@ function renderQueueTrack() {
     const isNext = idx === (state.currentQueueIndex + 1) % state.queue.length;
 
     let label = 'В очереди';
-    if (isActive) label = 'Сейчас 🧼';
-    else if (isNext) label = 'Следующий 🔔';
+    if (isActive) {
+      label = 'Сейчас 🧼';
+    } else if (isNext) {
+      label = 'Следующий 🔔';
+    } else {
+      const turnsAway = (idx - state.currentQueueIndex + state.queue.length) % state.queue.length;
+      label = `Через ${turnsAway} ${pluralize(turnsAway, 'смену', 'смены', 'смен')}`;
+    }
 
     const card = document.createElement('div');
     card.className = `queue-card ${isActive ? 'active' : ''}`;
     card.innerHTML = `
-      <span class="queue-pos-badge">#${idx + 1}</span>
+      <span class="queue-pos-badge">0${idx + 1}</span>
       <div class="queue-avatar">${member.avatar}</div>
       <div class="queue-name">${member.name}</div>
       <div class="queue-label">${label}</div>
@@ -1309,6 +1319,51 @@ function renderStats() {
         <span class="award-winner">Мама & Папа & Дети</span>
       </div>
     `;
+  }
+}
+
+// ========================================================
+// SHARE FAMILY REPORT (Telegram / WhatsApp Digest)
+// ========================================================
+function shareFamilyReport() {
+  if (window.soundFx) {
+    soundFx.playClick();
+    soundFx.playHaptic('medium');
+  }
+
+  const memberList = Object.values(state.members).map(m => ({
+    ...m,
+    count: state.stats[m.id] || 0
+  })).sort((a, b) => b.count - a.count);
+
+  const totalWashes = memberList.reduce((sum, m) => sum + m.count, 0);
+  const current = getCurrentDutyMember();
+  const medals = ['🥇', '🥈', '🥉', '✨'];
+
+  let text = `🍽️ ЧИСТАЯ ТАРЕЛКА PRO • СЕМЕЙНЫЙ РЕЙТИНГ\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `🧼 Сейчас дежурит: ${current.name} ${current.avatar}\n`;
+  text += `📊 Всего вымыто: ${totalWashes} ${pluralize(totalWashes, 'раз', 'раза', 'раз')}\n\n`;
+  text += `🏆 ДОСКА ПОЧЁТА СЕМЬИ:\n`;
+
+  memberList.forEach((m, idx) => {
+    const medal = medals[idx] || '✨';
+    const pct = totalWashes > 0 ? Math.round((m.count / totalWashes) * 100) : 0;
+    text += `${medal} ${m.name}: ${m.count} моек (${pct}%)\n`;
+  });
+
+  text += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `📱 Домашний график: http://192.168.1.75:8080`;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Отчёт скопирован для Telegram / WhatsApp! 📋', '✨');
+      soundFx.playVictory();
+    }).catch(() => {
+      prompt('Скопируйте отчёт:', text);
+    });
+  } else {
+    prompt('Скопируйте отчёт:', text);
   }
 }
 
@@ -2151,6 +2206,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnExportHistory = document.getElementById('btn-export-history');
   if (btnExportHistory) {
     btnExportHistory.addEventListener('click', exportHistoryToCSV);
+  }
+
+  // Share Family Report
+  const btnShareReport = document.getElementById('btn-share-family-report');
+  if (btnShareReport) {
+    btnShareReport.addEventListener('click', shareFamilyReport);
   }
 
   // Cloud Settings Tab
