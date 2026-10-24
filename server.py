@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ========================================================
 # ЧИСТАЯ ТАРЕЛКА — Сервер на Python 3 для Raspberry Pi
-# Высокопроизводительный сервер с поддержкой SSE,
-# In-Memory кэшированием, ETag 304 и Gzip сжатием.
+# Высокопроизводительный сервер с In-Memory кэшированием,
+# ETag 304 Not Modified и Gzip сжатием на лету.
 # ========================================================
 
 import os
@@ -13,7 +13,6 @@ import hashlib
 import copy
 import gzip
 import time
-import queue
 import threading
 import mimetypes
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -82,9 +81,6 @@ STATE_JSON_STR = "{}"
 STATE_JSON_BYTES = b"{}"
 STATE_GZIP_BYTES = b""
 
-SSE_CLIENTS = []
-SSE_CLIENTS_LOCK = threading.Lock()
-
 STATIC_CACHE = {}
 STATIC_CACHE_LOCK = threading.Lock()
 
@@ -147,24 +143,11 @@ def init_in_memory_state():
         STATE_JSON_STR = json.dumps(CURRENT_STATE, ensure_ascii=False)
         STATE_JSON_BYTES = STATE_JSON_STR.encode("utf-8")
         STATE_GZIP_BYTES = gzip.compress(STATE_JSON_BYTES, compresslevel=6)
-        print(f"[State] Загружено состояние из памяти (версия {STATE_VERSION}, {len(STATE_JSON_BYTES)} байт)")
+        print(f"[State] Состояние в памяти готово (версия {STATE_VERSION}, {len(STATE_JSON_BYTES)} байт)")
 
 def get_or_create_state():
     with STATE_LOCK:
         return copy.deepcopy(CURRENT_STATE)
-
-def broadcast_sse(event_name, data_str):
-    msg = f"event: {event_name}\ndata: {data_str}\n\n".encode("utf-8")
-    with SSE_CLIENTS_LOCK:
-        dead = []
-        for q in list(SSE_CLIENTS):
-            try:
-                q.put_nowait(msg)
-            except queue.Full:
-                dead.append(q)
-        for d in dead:
-            if d in SSE_CLIENTS:
-                SSE_CLIENTS.remove(d)
 
 def save_state(data):
     global CURRENT_STATE, STATE_VERSION, STATE_ETAG, STATE_JSON_STR, STATE_JSON_BYTES, STATE_GZIP_BYTES
@@ -191,9 +174,6 @@ def save_state(data):
         except Exception as e:
             print(f"[State] Ошибка сохранения {DATA_FILE}: {e}")
 
-    # Мгновенная рассылка всем подключенным клиентам по SSE
-    broadcast_sse("state_update", STATE_JSON_STR)
-
 # --------------------------------------------------------
 # Высокоскоростной кэш статических файлов (RAM)
 # --------------------------------------------------------
@@ -201,7 +181,7 @@ def get_static_file_response(rel_path, accept_gzip=False):
     clean_path = rel_path.lstrip("/")
     if not clean_path or clean_path == "/":
         clean_path = "index.html"
-    
+
     # Защита от выхода за пределы директории
     abs_path = os.path.abspath(os.path.join(BASE_DIR, clean_path))
     if not abs_path.startswith(BASE_DIR) or not os.path.isfile(abs_path):
@@ -270,11 +250,13 @@ def get_static_file_response(rel_path, accept_gzip=False):
 # HTTP Обработчик запросов
 # --------------------------------------------------------
 class DishDutyHandler(SimpleHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BASE_DIR, **kwargs)
 
     def log_message(self, format, *args):
-        # Отключаем спам в консоль при частых запросах ETag / SSE
+        # Отключаем спам в консоль
         pass
 
     def do_OPTIONS(self):
@@ -320,46 +302,7 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
             self.wfile.write(payload)
             return
 
-        # 2. API: Server-Sent Events (Мгновенный Real-time Push)
-        if parsed.path == "/api/events":
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache, no-transform")
-            self.send_header("Connection", "keep-alive")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("X-Accel-Buffering", "no")
-            self.end_headers()
-
-            client_q = queue.Queue(maxsize=32)
-            with SSE_CLIENTS_LOCK:
-                SSE_CLIENTS.append(client_q)
-
-            # Отправляем текущее состояние сразу при подключении
-            with STATE_LOCK:
-                init_msg = f"event: state_update\ndata: {STATE_JSON_STR}\n\n".encode("utf-8")
-
-            try:
-                self.wfile.write(init_msg)
-                self.wfile.flush()
-
-                while True:
-                    try:
-                        event_bytes = client_q.get(timeout=20.0)
-                        self.wfile.write(event_bytes)
-                        self.wfile.flush()
-                    except queue.Empty:
-                        # Keepalive пинг каждые 20 секунд
-                        self.wfile.write(b": ping\n\n")
-                        self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError, socket.error):
-                pass
-            finally:
-                with SSE_CLIENTS_LOCK:
-                    if client_q in SSE_CLIENTS:
-                        SSE_CLIENTS.remove(client_q)
-            return
-
-        # 3. API: Легковесный опрос версии (30 байт)
+        # 2. API: Легковесный опрос версии (30 байт)
         if parsed.path == "/api/version":
             with STATE_LOCK:
                 ver_bytes = json.dumps({"version": STATE_VERSION, "etag": STATE_ETAG}).encode("utf-8")
@@ -372,7 +315,7 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
             self.wfile.write(ver_bytes)
             return
 
-        # 4. Статические файлы (Gzip + ETag 304 + In-Memory RAM Cache)
+        # 3. Статические файлы (Gzip + ETag 304 + In-Memory RAM Cache)
         accept_gzip = "gzip" in self.headers.get("Accept-Encoding", "")
         file_resp = get_static_file_response(parsed.path, accept_gzip)
         if file_resp:
@@ -555,7 +498,7 @@ def run():
 
     print("\n======================================================")
     print("🍽️   ЧИСТАЯ ТАРЕЛКА — Сервер на Python 3 для Raspberry Pi")
-    print("🚀  Поддержка: Real-time SSE + In-Memory + ETag + Gzip")
+    print("⚡  Ultra-Fast: In-Memory + ETag 304 + HTTP/1.1 + Gzip")
     print("======================================================")
     print(f"📱  Доступно по адресу: http://192.168.1.75:{PORT}")
     print(f"💾  База данных: {DATA_FILE}")

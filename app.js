@@ -40,7 +40,8 @@ let state = loadState();
 let settings = loadSettings();
 let undoAction = null;
 let wakeLockSentinel = null;
-let cloudEventSource = null;
+let isInitialSyncDone = false;
+let isFetchingState = false;
 let currentHistoryFilter = 'all';
 
 // ========================================================
@@ -502,13 +503,10 @@ class CelebrationFX {
 const celebration = new CelebrationFX('fx-canvas');
 
 // ========================================================
-// SYNCHRONIZATION ENGINE (SSE + In-Memory ETag 304 + Adaptive Polling + Battery Saver)
+// SYNCHRONIZATION ENGINE (In-Memory ETag 304 + Ultra-Fast Adaptive Polling + Battery Saver)
 // ========================================================
 let serverPollInterval = null;
 let lastServerETag = null;
-let sseReconnectTimer = null;
-let sseReconnectDelay = 2000;
-let isTabActive = !document.hidden;
 
 function updateConnectionUI(online) {
   const dot = document.querySelector('.cloud-dot');
@@ -528,14 +526,19 @@ function applyServerState(serverState) {
   const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}`;
   const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}`;
 
-  if (sHash !== lHash) {
-    const prevWasher = getCurrentDutyMember().name;
+  const wasInitial = !isInitialSyncDone;
+  isInitialSyncDone = true;
+
+  if (sHash !== lHash || wasInitial) {
+    const prevWasher = getCurrentDutyMember() ? getCurrentDutyMember().name : null;
     state = { ...DEFAULT_STATE, ...serverState };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     renderAll();
 
-    const newWasher = getCurrentDutyMember().name;
-    if (prevWasher !== newWasher) {
+    const newWasher = getCurrentDutyMember() ? getCurrentDutyMember().name : null;
+    // CRITICAL FIX: Only play victory sound and burst confetti on actual user-initiated transitions,
+    // NEVER on initial page load / hydration!
+    if (!wasInitial && prevWasher && newWasher && prevWasher !== newWasher) {
       soundFx.playVictory();
       celebration.burst(getCurrentDutyMember().color);
     }
@@ -544,7 +547,9 @@ function applyServerState(serverState) {
 
 async function fetchStateOnce(force = false) {
   if (document.hidden && !force) return;
+  if (isFetchingState && !force) return;
 
+  isFetchingState = true;
   try {
     const headers = {};
     if (lastServerETag && !force) {
@@ -554,7 +559,7 @@ async function fetchStateOnce(force = false) {
     const res = await fetch('/api/state', { headers, cache: 'no-store' });
 
     if (res.status === 304) {
-      // 304 Not Modified: 0 body bytes transferred! State unchanged!
+      // 304 Not Modified: 0 body bytes transferred! In-memory check passed in <1ms.
       updateConnectionUI(true);
       return;
     }
@@ -572,6 +577,8 @@ async function fetchStateOnce(force = false) {
     }
   } catch (e) {
     updateConnectionUI(false);
+  } finally {
+    isFetchingState = false;
   }
 }
 
@@ -584,16 +591,12 @@ function startServerPolling() {
   // If tab is in background, never poll (saves mobile battery and CPU)
   if (document.hidden) return;
 
-  // Adaptive interval: if SSE stream is healthy, poll only every 35s as fallback.
-  // If SSE is reconnecting or down, poll every 5s.
-  const isSSEActive = cloudEventSource && cloudEventSource.readyState === EventSource.OPEN;
-  const pollDelay = isSSEActive ? 35000 : 5000;
-
+  // Ultra-light in-memory ETag polling every 3.5s (0 body bytes overhead when 304)
   serverPollInterval = setInterval(() => {
     if (!document.hidden) {
       fetchStateOnce();
     }
-  }, pollDelay);
+  }, 3500);
 }
 
 function stopServerPolling() {
@@ -603,65 +606,8 @@ function stopServerPolling() {
   }
 }
 
-function connectLocalServerSSE() {
-  if (cloudEventSource) {
-    cloudEventSource.close();
-    cloudEventSource = null;
-  }
-  if (sseReconnectTimer) {
-    clearTimeout(sseReconnectTimer);
-    sseReconnectTimer = null;
-  }
-
-  // If in background, delay SSE connection until foreground
-  if (document.hidden) return;
-
-  try {
-    cloudEventSource = new EventSource('/api/events');
-
-    cloudEventSource.addEventListener('state_update', (e) => {
-      try {
-        const raw = JSON.parse(e.data);
-        const serverState = (raw && raw.state) ? raw.state : raw;
-        applyServerState(serverState);
-        updateConnectionUI(true);
-      } catch (err) {
-        console.error('Error handling SSE state_update:', err);
-      }
-    });
-
-    cloudEventSource.onopen = () => {
-      sseReconnectDelay = 2000;
-      updateConnectionUI(true);
-      // Switch polling to relaxed 35s keepalive since SSE is pushing live
-      startServerPolling();
-    };
-
-    cloudEventSource.onerror = () => {
-      if (cloudEventSource) {
-        cloudEventSource.close();
-        cloudEventSource = null;
-      }
-      // Tighten polling while SSE is offline
-      startServerPolling();
-
-      // Exponential backoff reconnect: 2s -> 3s -> 4.5s -> max 15s
-      sseReconnectTimer = setTimeout(() => {
-        if (!document.hidden) {
-          connectLocalServerSSE();
-        }
-      }, sseReconnectDelay);
-      sseReconnectDelay = Math.min(Math.round(sseReconnectDelay * 1.5), 15000);
-    };
-  } catch (err) {
-    console.warn('SSE not supported:', err);
-    startServerPolling();
-  }
-}
-
 async function initCloudSync() {
   await fetchStateOnce(true);
-  connectLocalServerSSE();
   startServerPolling();
 }
 
@@ -692,6 +638,10 @@ async function pushStateToCloud(actionType = null) {
       body: JSON.stringify(payload)
     });
     if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && data.etag) {
+        lastServerETag = data.etag;
+      }
       updateConnectionUI(true);
     } else if (res.status === 401) {
       console.warn('Authentication token expired or rejected by server.');
@@ -712,30 +662,25 @@ async function pushStateToCloud(actionType = null) {
 // Smart Battery Saver: Pause sync and polling when screen is locked or tab is hidden
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    isTabActive = false;
     stopServerPolling();
   } else {
-    isTabActive = true;
-    fetchStateOnce();
-    if (!cloudEventSource || cloudEventSource.readyState !== EventSource.OPEN) {
-      connectLocalServerSSE();
-    }
-    startServerPolling();
-  }
-});
-
-window.addEventListener('pageshow', () => {
-  if (!document.hidden) {
     fetchStateOnce();
     startServerPolling();
   }
 });
 
-window.addEventListener('focus', () => {
-  if (!document.hidden) {
-    fetchStateOnce();
-  }
-});
+let resumeThrottleTimer = null;
+function handleThrottledResume() {
+  if (document.hidden) return;
+  if (resumeThrottleTimer) return;
+  resumeThrottleTimer = setTimeout(() => {
+    resumeThrottleTimer = null;
+  }, 1200);
+  fetchStateOnce();
+}
+
+window.addEventListener('pageshow', handleThrottledResume);
+window.addEventListener('focus', handleThrottledResume);
 
 // ========================================================
 // CORE TURN & WASH LOGIC
