@@ -563,6 +563,7 @@ body::before {
   border: 1px dashed var(--amber);
   opacity: 0.6;
   animation: rotateAura 24s linear infinite;
+  will-change: transform;
 }
 
 @keyframes rotateAura {
@@ -1013,6 +1014,36 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 160px;
+}
+
+.history-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 20px;
+}
+
+.btn-history-more {
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-strong);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 10px 22px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 160ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-history-more:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: var(--surface-strong);
 }
 
 .timeline-date-label {

@@ -1,6 +1,7 @@
 // ==========================================
-// ЧИСТАЯ ТАРЕЛКА — Сервер для Raspberry Pi
+// ЧИСТАЯ ТАРЕЛКА — Сервер для Raspberry Pi (Node.js)
 // Система семейных аккаунтов (Админ: Серёжа)
+// Поддержка In-Memory, SSE, ETag 304, Fast Cache
 // ==========================================
 
 const http = require('http');
@@ -8,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 const PORT = process.env.PORT || 8080;
 const DATA_FILE = path.join(__dirname, 'data.json');
@@ -98,57 +100,72 @@ const DEFAULT_STATE = {
   history: []
 };
 
-// MIME types
-const MIME_TYPES = {
-  '.html': 'text/html; charset=UTF-8',
-  '.css': 'text/css; charset=UTF-8',
-  '.js': 'text/javascript; charset=UTF-8',
-  '.json': 'application/json; charset=UTF-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.ico': 'image/x-icon'
-};
-
-// Connected SSE clients
-const sseClients = new Set();
+// In-Memory State Cache
+let memoryState = null;
+let stateVersion = Date.now();
+let stateEtag = `"${stateVersion}"`;
+let stateJsonStr = '';
+let stateJsonBuffer = Buffer.from('{}');
 
 function getOrCreateState() {
+  if (memoryState) return memoryState;
+
   if (fs.existsSync(DATA_FILE)) {
     try {
-      const content = fs.readFileSync(DATA_FILE, 'utf-8');
-      const parsed = JSON.parse(content);
-      if (parsed && parsed.queue && Array.isArray(parsed.queue) && parsed.members) {
-        return parsed;
+      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      if (data && data.queue && data.members) {
+        memoryState = data;
+        stateJsonStr = JSON.stringify(memoryState);
+        stateJsonBuffer = Buffer.from(stateJsonStr);
+        return memoryState;
       }
     } catch (e) {
-      console.error('Error reading data.json, re-initializing:', e);
+      console.error('Ошибка загрузки data.json, восстанавливаем по умолчанию:', e.message);
     }
   }
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(DEFAULT_STATE, null, 2), 'utf-8');
-    console.log('✅ Инициализирована база данных data.json');
-  } catch (err) {
-    console.error('Failed to create data.json:', err);
-  }
-  return JSON.parse(JSON.stringify(DEFAULT_STATE));
+
+  memoryState = { ...DEFAULT_STATE };
+  stateJsonStr = JSON.stringify(memoryState);
+  stateJsonBuffer = Buffer.from(stateJsonStr);
+  saveStateToDisk(memoryState);
+  return memoryState;
 }
 
 function saveStateToDisk(data) {
+  memoryState = { ...DEFAULT_STATE, ...data };
+  if (!data.members) memoryState.members = DEFAULT_STATE.members;
+  stateVersion = Date.now();
+  stateEtag = `"${stateVersion}"`;
+  stateJsonStr = JSON.stringify(memoryState);
+  stateJsonBuffer = Buffer.from(stateJsonStr);
+
+  const tmp = DATA_FILE + '.tmp';
   try {
-    const merged = { ...DEFAULT_STATE, ...(data || {}) };
-    if (!data.members || Object.keys(data.members).length === 0) {
-      merged.members = DEFAULT_STATE.members;
-    }
-    const tempFile = DATA_FILE + '.tmp';
-    fs.writeFileSync(tempFile, JSON.stringify(merged, null, 2), 'utf-8');
-    fs.renameSync(tempFile, DATA_FILE);
-  } catch (err) {
-    console.error('Error saving data.json:', err);
+    fs.writeFileSync(tmp, JSON.stringify(memoryState, null, 2), 'utf-8');
+    fs.renameSync(tmp, DATA_FILE);
+  } catch (e) {
+    console.error('Ошибка записи data.json:', e.message);
   }
 }
 
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json'
+};
+
+// SSE Subscribers
+const sseClients = new Set();
+
 function broadcastUpdate(data) {
-  const payload = `event: state_update\ndata: ${JSON.stringify(data)}\n\n`;
+  const payload = `event: state_update\ndata: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`;
   for (const client of sseClients) {
     try {
       client.write(payload);
@@ -173,8 +190,8 @@ function getLocalIp() {
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Auth-User, X-Auth-Token, X-Auth-Password, X-Admin-Password, X-Member-Id');
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Auth-User, X-Auth-Token, X-Auth-Password, X-Admin-Password, X-Member-Id, If-None-Match');
+  res.setHeader('Access-Control-Max-Age', '86400');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -184,19 +201,44 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  // 1. API: Get Current Master State
+  // 1. API: Get Current Master State (ETag 304 + In-Memory)
   if (url.pathname === '/api/state' && req.method === 'GET') {
-    const currentState = getOrCreateState();
+    getOrCreateState();
+
+    const reqEtag = req.headers['if-none-match'];
+    if (reqEtag && reqEtag.trim() === stateEtag) {
+      res.writeHead(304, {
+        'ETag': stateEtag,
+        'Cache-Control': 'no-cache, must-revalidate'
+      });
+      res.end();
+      return;
+    }
+
     res.writeHead(200, {
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache'
+      'ETag': stateEtag,
+      'Cache-Control': 'no-cache, must-revalidate',
+      'Content-Length': stateJsonBuffer.length
     });
-    res.end(JSON.stringify(currentState));
+    res.end(stateJsonBuffer);
     return;
   }
 
-  // 2. API: Login
+  // 2. API: Version
+  if (url.pathname === '/api/version' && req.method === 'GET') {
+    getOrCreateState();
+    const vBuf = Buffer.from(JSON.stringify({ version: stateVersion, etag: stateEtag }));
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, must-revalidate',
+      'Content-Length': vBuf.length
+    });
+    res.end(vBuf);
+    return;
+  }
+
+  // 3. API: Login
   if (url.pathname === '/api/login' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -209,8 +251,7 @@ const server = http.createServer((req, res) => {
         const acc = ACCOUNTS[user];
         if (acc && acc.password === pass) {
           const token = generateToken(user);
-          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({
+          const resPayload = JSON.stringify({
             success: true,
             user: {
               username: acc.username,
@@ -219,7 +260,9 @@ const server = http.createServer((req, res) => {
               avatar: acc.avatar
             },
             token: token
-          }));
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(resPayload);
         } else {
           res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'Неверный пароль. Попробуйте ещё раз' }));
@@ -232,7 +275,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 3. API: Update State
+  // 4. API: Update State
   if (url.pathname === '/api/state' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -251,30 +294,28 @@ const server = http.createServer((req, res) => {
         const authUser = acc.username;
 
         if (!isAdmin) {
-          const currentState = getOrCreateState();
-          const currQ = currentState.queue || [];
-          const currIdx = currentState.currentQueueIndex || 0;
-          const currDutyId = currQ[currIdx];
+          const currState = getOrCreateState();
+          const currQ = currState.queue || [];
+          const currIdx = currState.currentQueueIndex || 0;
+          const currDutyId = (currQ && currIdx < currQ.length) ? currQ[currIdx] : null;
 
-          // 1. Changing queue order requires Admin rights
           if (JSON.stringify(parsedState.queue) !== JSON.stringify(currQ)) {
             res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({ error: 'Изменять порядок очереди может только Серёжа (Администратор)' }));
             return;
           }
 
-          // 2. Only current duty member can mark duty as done, react or undo
           const action = parsedState._action || '';
           const isDutyWash = (['wash', 'wash_done'].includes(action) && authUser && currDutyId && authUser === currDutyId);
           const isReaction = (action === 'reaction');
           const isUndo = (action === 'undo');
 
           if (!isDutyWash && !isReaction && !isUndo) {
-            let errMsg;
+            let errMsg = '';
             if (['skip', 'swap', 'reorder', 'reset'].includes(action)) {
               errMsg = 'Управлять очередью и настройками может только Серёжа (Администратор)';
             } else {
-              const currDutyName = (currentState.members && currentState.members[currDutyId]) ? currentState.members[currDutyId].name : 'дежурного';
+              const currDutyName = (currState.members && currState.members[currDutyId]) ? currState.members[currDutyId].name : 'дежурного';
               errMsg = `Сейчас очередь дежурить: ${currDutyName}. Отметить помывку может только он(а)`;
             }
             res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -294,10 +335,9 @@ const server = http.createServer((req, res) => {
 
         if (parsedState && parsedState.queue) {
           saveStateToDisk(parsedState);
-          broadcastUpdate(parsedState);
+          broadcastUpdate(stateJsonStr);
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ success: true }));
-          console.log(`[${new Date().toLocaleTimeString()}] Посуда обновлена пользователем ${acc.name} (${acc.role})! Синхронизировано на всех устройствах.`);
           return;
         }
         throw new Error('Invalid state structure');
@@ -309,26 +349,33 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 4. API: Real-Time SSE Stream
+  // 5. API: Real-Time SSE Stream
   if (url.pathname === '/api/events') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive'
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
     });
-    res.write(':\n\n');
+
+    getOrCreateState();
+    res.write(`event: state_update\ndata: ${stateJsonStr}\n\n`);
 
     sseClients.add(res);
 
+    const pingTimer = setInterval(() => {
+      try { res.write(': ping\n\n'); } catch (e) {}
+    }, 20000);
+
     req.on('close', () => {
+      clearInterval(pingTimer);
       sseClients.delete(res);
     });
     return;
   }
 
-  // 5. Static Files Serving
+  // 6. Static Files Serving
   let filePath = path.join(PUBLIC_DIR, url.pathname === '/' ? 'index.html' : url.pathname);
-
   if (!fs.existsSync(filePath)) {
     filePath = path.join(PUBLIC_DIR, 'public', url.pathname);
     if (!fs.existsSync(filePath)) {
@@ -336,22 +383,32 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  const ext = path.extname(filePath).toLowerCase();
-  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+  try {
+    const stat = fs.statSync(filePath);
+    const fileEtag = `"${Math.floor(stat.mtimeMs)}-${stat.size}"`;
+    const reqEtag = req.headers['if-none-match'];
 
-  fs.readFile(filePath, (err, content) => {
-    if (err) {
-      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('500 Server Error: ' + err.code);
+    if (reqEtag && reqEtag.trim() === fileEtag) {
+      res.writeHead(304, { 'ETag': fileEtag, 'Cache-Control': 'public, max-age=600, must-revalidate' });
+      res.end();
       return;
     }
+
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    const content = fs.readFileSync(filePath);
+
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache'
+      'ETag': fileEtag,
+      'Cache-Control': url.pathname === '/sw.js' ? 'no-cache, must-revalidate' : 'public, max-age=600, must-revalidate',
+      'Content-Length': content.length
     });
     res.end(content);
-  });
+  } catch (err) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('404 Not Found');
+  }
 });
 
 // Start Server
@@ -361,6 +418,7 @@ server.listen(PORT, '0.0.0.0', () => {
 
   console.log('\n======================================================');
   console.log('🍽️   ЧИСТАЯ ТАРЕЛКА — Сервер для всей семьи (Raspberry Pi)');
+  console.log('🚀  Node.js: Real-time SSE + In-Memory + ETag + 304');
   console.log('======================================================');
   console.log(`📱  Домашний Wi-Fi адрес:  http://${localIp}:${PORT}`);
   console.log(`💻  Локальный адрес:       http://localhost:${PORT}`);

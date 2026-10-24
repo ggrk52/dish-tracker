@@ -502,83 +502,105 @@ class CelebrationFX {
 const celebration = new CelebrationFX('fx-canvas');
 
 // ========================================================
-// SYNCHRONIZATION ENGINE (Master Raspberry Pi Server + SSE + Fast Polling)
+// SYNCHRONIZATION ENGINE (SSE + In-Memory ETag 304 + Adaptive Polling + Battery Saver)
 // ========================================================
 let serverPollInterval = null;
+let lastServerETag = null;
+let sseReconnectTimer = null;
+let sseReconnectDelay = 2000;
+let isTabActive = !document.hidden;
 
-async function initCloudSync() {
+function updateConnectionUI(online) {
   const dot = document.querySelector('.cloud-dot');
   const label = document.getElementById('cloud-status-label');
+  if (online) {
+    if (dot) dot.className = 'cloud-dot local-connected';
+    if (label) label.textContent = 'Сервер онлайн 🟢';
+  } else {
+    if (dot) dot.className = 'cloud-dot';
+    if (label) label.textContent = 'Офлайн (локально)';
+  }
+}
 
-  // Try connecting to Master Server (/api/state)
+function applyServerState(serverState) {
+  if (!serverState || !serverState.queue || !Array.isArray(serverState.queue)) return;
+
+  const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}`;
+  const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}`;
+
+  if (sHash !== lHash) {
+    const prevWasher = getCurrentDutyMember().name;
+    state = { ...DEFAULT_STATE, ...serverState };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    renderAll();
+
+    const newWasher = getCurrentDutyMember().name;
+    if (prevWasher !== newWasher) {
+      soundFx.playVictory();
+      celebration.burst(getCurrentDutyMember().color);
+    }
+  }
+}
+
+async function fetchStateOnce(force = false) {
+  if (document.hidden && !force) return;
+
   try {
-    const localRes = await fetch('/api/state', { cache: 'no-store' });
-    if (localRes.ok) {
-      const data = await localRes.json();
+    const headers = {};
+    if (lastServerETag && !force) {
+      headers['If-None-Match'] = lastServerETag;
+    }
+
+    const res = await fetch('/api/state', { headers, cache: 'no-store' });
+
+    if (res.status === 304) {
+      // 304 Not Modified: 0 body bytes transferred! State unchanged!
+      updateConnectionUI(true);
+      return;
+    }
+
+    if (res.ok) {
+      const etag = res.headers.get('ETag');
+      if (etag) lastServerETag = etag;
+
+      const data = await res.json();
       const serverState = (data && data.state) ? data.state : data;
-
-      if (serverState && serverState.queue && Array.isArray(serverState.queue)) {
-        state = { ...DEFAULT_STATE, ...serverState };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        renderAll();
-
-        if (dot) dot.className = 'cloud-dot local-connected';
-        if (label) label.textContent = 'Сервер онлайн 🟢';
-
-        connectLocalServerSSE();
-        startServerPolling();
-        return;
-      }
+      applyServerState(serverState);
+      updateConnectionUI(true);
+    } else {
+      updateConnectionUI(false);
     }
   } catch (e) {
-    console.warn('Server fetch error:', e);
+    updateConnectionUI(false);
   }
-
-  // Fallback to offline
-  if (dot) dot.className = 'cloud-dot';
-  if (label) label.textContent = 'Офлайн (локально)';
 }
 
 function startServerPolling() {
-  if (serverPollInterval) clearInterval(serverPollInterval);
+  if (serverPollInterval) {
+    clearInterval(serverPollInterval);
+    serverPollInterval = null;
+  }
 
-  // Poll server every 2 seconds to guarantee sync even if mobile browser pauses SSE
-  serverPollInterval = setInterval(async () => {
-    try {
-      const res = await fetch('/api/state', { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        const serverState = (data && data.state) ? data.state : data;
-        if (serverState && serverState.queue) {
-          const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}`;
-          const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}`;
+  // If tab is in background, never poll (saves mobile battery and CPU)
+  if (document.hidden) return;
 
-          if (sHash !== lHash) {
-            const prevWasher = getCurrentDutyMember().name;
-            state = { ...DEFAULT_STATE, ...serverState };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-            renderAll();
+  // Adaptive interval: if SSE stream is healthy, poll only every 35s as fallback.
+  // If SSE is reconnecting or down, poll every 5s.
+  const isSSEActive = cloudEventSource && cloudEventSource.readyState === EventSource.OPEN;
+  const pollDelay = isSSEActive ? 35000 : 5000;
 
-            const newWasher = getCurrentDutyMember().name;
-            if (prevWasher !== newWasher) {
-              soundFx.playVictory();
-              celebration.burst(getCurrentDutyMember().color);
-            }
-          }
-
-          const dot = document.querySelector('.cloud-dot');
-          const label = document.getElementById('cloud-status-label');
-          if (dot) dot.className = 'cloud-dot local-connected';
-          if (label) label.textContent = 'Сервер онлайн 🟢';
-        }
-      }
-    } catch (e) {
-      const dot = document.querySelector('.cloud-dot');
-      const label = document.getElementById('cloud-status-label');
-      if (dot) dot.className = 'cloud-dot';
-      if (label) label.textContent = 'Нет связи с сервером 🔴';
+  serverPollInterval = setInterval(() => {
+    if (!document.hidden) {
+      fetchStateOnce();
     }
-  }, 2000);
+  }, pollDelay);
+}
+
+function stopServerPolling() {
+  if (serverPollInterval) {
+    clearInterval(serverPollInterval);
+    serverPollInterval = null;
+  }
 }
 
 function connectLocalServerSSE() {
@@ -586,42 +608,61 @@ function connectLocalServerSSE() {
     cloudEventSource.close();
     cloudEventSource = null;
   }
+  if (sseReconnectTimer) {
+    clearTimeout(sseReconnectTimer);
+    sseReconnectTimer = null;
+  }
+
+  // If in background, delay SSE connection until foreground
+  if (document.hidden) return;
+
   try {
     cloudEventSource = new EventSource('/api/events');
+
     cloudEventSource.addEventListener('state_update', (e) => {
       try {
         const raw = JSON.parse(e.data);
         const serverState = (raw && raw.state) ? raw.state : raw;
-        if (serverState && serverState.queue) {
-          const prevWasher = getCurrentDutyMember().name;
-          state = { ...DEFAULT_STATE, ...serverState };
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-          renderAll();
-
-          const newWasher = getCurrentDutyMember().name;
-          if (prevWasher !== newWasher) {
-            soundFx.playVictory();
-            celebration.burst(getCurrentDutyMember().color);
-          }
-        }
+        applyServerState(serverState);
+        updateConnectionUI(true);
       } catch (err) {
         console.error('Error handling SSE state_update:', err);
       }
     });
 
     cloudEventSource.onopen = () => {
-      const dot = document.querySelector('.cloud-dot');
-      const label = document.getElementById('cloud-status-label');
-      if (dot) dot.className = 'cloud-dot local-connected';
-      if (label) label.textContent = 'Сервер онлайн 🟢';
+      sseReconnectDelay = 2000;
+      updateConnectionUI(true);
+      // Switch polling to relaxed 35s keepalive since SSE is pushing live
+      startServerPolling();
     };
 
     cloudEventSource.onerror = () => {
-      setTimeout(initCloudSync, 4000);
+      if (cloudEventSource) {
+        cloudEventSource.close();
+        cloudEventSource = null;
+      }
+      // Tighten polling while SSE is offline
+      startServerPolling();
+
+      // Exponential backoff reconnect: 2s -> 3s -> 4.5s -> max 15s
+      sseReconnectTimer = setTimeout(() => {
+        if (!document.hidden) {
+          connectLocalServerSSE();
+        }
+      }, sseReconnectDelay);
+      sseReconnectDelay = Math.min(Math.round(sseReconnectDelay * 1.5), 15000);
     };
   } catch (err) {
     console.warn('SSE not supported:', err);
+    startServerPolling();
   }
+}
+
+async function initCloudSync() {
+  await fetchStateOnce(true);
+  connectLocalServerSSE();
+  startServerPolling();
 }
 
 async function pushStateToCloud(actionType = null) {
@@ -651,10 +692,7 @@ async function pushStateToCloud(actionType = null) {
       body: JSON.stringify(payload)
     });
     if (res.ok) {
-      const dot = document.querySelector('.cloud-dot');
-      const label = document.getElementById('cloud-status-label');
-      if (dot) dot.className = 'cloud-dot local-connected';
-      if (label) label.textContent = 'Сервер онлайн 🟢';
+      updateConnectionUI(true);
     } else if (res.status === 401) {
       console.warn('Authentication token expired or rejected by server.');
       setAuthSession(null);
@@ -662,28 +700,41 @@ async function pushStateToCloud(actionType = null) {
     } else if (res.status === 403) {
       const errData = await res.json().catch(() => ({}));
       showToast(errData.error || 'Действие отклонено сервером', '🔒');
-      initCloudSync();
+      fetchStateOnce(true);
     }
   } catch (e) {
     console.warn('Failed to push state to server:', e);
-    const dot = document.querySelector('.cloud-dot');
     const label = document.getElementById('cloud-status-label');
-    if (dot) dot.className = 'cloud-dot';
     if (label) label.textContent = 'Ошибка отправки 🔴';
   }
 }
 
-// Re-sync immediately on phone wake up / screen unlock
+// Smart Battery Saver: Pause sync and polling when screen is locked or tab is hidden
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    initCloudSync();
+  if (document.hidden) {
+    isTabActive = false;
+    stopServerPolling();
+  } else {
+    isTabActive = true;
+    fetchStateOnce();
+    if (!cloudEventSource || cloudEventSource.readyState !== EventSource.OPEN) {
+      connectLocalServerSSE();
+    }
+    startServerPolling();
   }
 });
+
 window.addEventListener('pageshow', () => {
-  initCloudSync();
+  if (!document.hidden) {
+    fetchStateOnce();
+    startServerPolling();
+  }
 });
+
 window.addEventListener('focus', () => {
-  initCloudSync();
+  if (!document.hidden) {
+    fetchStateOnce();
+  }
 });
 
 // ========================================================
@@ -825,19 +876,54 @@ function handleReaction(historyId, reactionType) {
 }
 
 // ========================================================
-// RENDERING
+// RENDERING (Lazy Tab Evaluation + DOM Micro-Diffing)
 // ========================================================
-function renderAll() {
-  renderDutyTab();
-  renderHistory();
-  renderStats();
-  renderAuthStatus();
-  renderProfileUI();
+const dirtyTabs = {
+  'tab-duty': true,
+  'tab-history': true,
+  'tab-stats': true
+};
+
+function markTabsDirty() {
+  dirtyTabs['tab-duty'] = true;
+  dirtyTabs['tab-history'] = true;
+  dirtyTabs['tab-stats'] = true;
 }
+
+function renderActiveTab() {
+  renderAuthStatus();
+  const currentTab = settings.activeTab || 'tab-duty';
+
+  if (currentTab === 'tab-duty') {
+    if (dirtyTabs['tab-duty']) {
+      renderDutyTab();
+      renderProfileUI();
+      dirtyTabs['tab-duty'] = false;
+    }
+  } else if (currentTab === 'tab-history') {
+    if (dirtyTabs['tab-history']) {
+      renderHistory();
+      dirtyTabs['tab-history'] = false;
+    }
+  } else if (currentTab === 'tab-stats') {
+    if (dirtyTabs['tab-stats']) {
+      renderStats();
+      dirtyTabs['tab-stats'] = false;
+    }
+  }
+}
+
+function renderAll() {
+  markTabsDirty();
+  renderActiveTab();
+}
+
+let lastRenderedQueueHash = '';
 
 function renderDutyTab() {
   const current = getCurrentDutyMember();
-  
+  dirtyTabs['tab-duty'] = false;
+
   // Hero components
   const heroCard = document.getElementById('duty-hero');
   const heroAvatar = document.getElementById('hero-avatar');
@@ -847,13 +933,16 @@ function renderDutyTab() {
   const heroStreak = document.getElementById('hero-streak');
   const heroAura = document.getElementById('hero-aura');
 
-  if (heroAvatar) heroAvatar.textContent = current.avatar;
-  if (heroName) {
-    heroName.textContent = current.name;
-    heroName.style.color = current.color;
+  if (heroAvatar && heroAvatar.textContent !== current.avatar) {
+    heroAvatar.textContent = current.avatar;
   }
-  if (heroRoleTitle) {
-    heroRoleTitle.textContent = current.title || 'Член семьи';
+  if (heroName) {
+    if (heroName.textContent !== current.name) heroName.textContent = current.name;
+    if (heroName.style.color !== current.color) heroName.style.color = current.color;
+  }
+  const roleTitle = current.title || 'Член семьи';
+  if (heroRoleTitle && heroRoleTitle.textContent !== roleTitle) {
+    heroRoleTitle.textContent = roleTitle;
   }
   if (heroAura) {
     heroAura.style.borderTopColor = current.color;
@@ -864,9 +953,15 @@ function renderDutyTab() {
     heroCard.style.borderColor = `${current.color}45`;
   }
 
-  if (heroTimer) heroTimer.textContent = `⏱️ ${formatDutyDuration(state.dutyStartedAt)}`;
+  const timerText = `⏱️ ${formatDutyDuration(state.dutyStartedAt)}`;
+  if (heroTimer && heroTimer.textContent !== timerText) {
+    heroTimer.textContent = timerText;
+  }
   const totalMemberWashes = state.stats[current.id] || 0;
-  if (heroStreak) heroStreak.textContent = `🧼 Помыто: ${totalMemberWashes}`;
+  const streakText = `🧼 Помыто: ${totalMemberWashes}`;
+  if (heroStreak && heroStreak.textContent !== streakText) {
+    heroStreak.textContent = streakText;
+  }
 
   // Queue track
   renderQueueTrack();
@@ -877,6 +972,13 @@ function renderDutyTab() {
 
 function renderQueueTrack() {
   const track = document.getElementById('queue-track');
+  if (!track) return;
+
+  const currentHash = `${state.currentQueueIndex}:${state.queue.join(',')}`;
+  if (currentHash === lastRenderedQueueHash && track.children.length > 0) {
+    return; // Queue structure and index unchanged, skip DOM rebuild!
+  }
+  lastRenderedQueueHash = currentHash;
   track.innerHTML = '';
 
   state.queue.forEach((memberId, idx) => {
@@ -910,6 +1012,7 @@ function renderQueueTrack() {
 
 function renderActivityGlance() {
   const glanceBox = document.getElementById('recent-glance-box');
+  if (!glanceBox) return;
   glanceBox.innerHTML = '';
 
   if (state.history.length === 0) {
@@ -935,13 +1038,17 @@ function renderActivityGlance() {
   });
 }
 
-// Render Tab 2: Detailed History
+let historyRenderLimit = 25;
+
+// Render Tab 2: Detailed History (Virtual Pagination & Delegated Events)
 function renderHistory() {
   const timeline = document.getElementById('history-timeline');
+  if (!timeline) return;
   timeline.innerHTML = '';
+  dirtyTabs['tab-history'] = false;
 
   // Filter history
-  let filtered = state.history;
+  let filtered = state.history || [];
   if (currentHistoryFilter !== 'all') {
     filtered = filtered.filter(h => h.memberId === currentHistoryFilter);
   }
@@ -950,18 +1057,35 @@ function renderHistory() {
   document.querySelectorAll('.filter-chip').forEach(chip => {
     const filter = chip.getAttribute('data-filter');
     if (filter === 'all') {
-      chip.textContent = `Все (${state.history.length})`;
+      chip.textContent = `Все (${(state.history || []).length})`;
     }
   });
 
   if (filtered.length === 0) {
-    timeline.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">История пуста. Начните отмечать дежурства! 🍽️</div>`;
+    timeline.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted); font-family:var(--font-mono); font-size:0.85rem;">История пуста. Начните отмечать дежурства! 🍽️</div>`;
     return;
   }
 
+  // Delegate reaction clicks once on timeline container (zero memory leak, zero per-item listener loop)
+  if (!timeline._hasReactionDelegation) {
+    timeline._hasReactionDelegation = true;
+    timeline.addEventListener('click', (e) => {
+      const btn = e.target.closest('.reaction-btn');
+      if (!btn) return;
+      const id = Number(btn.getAttribute('data-id'));
+      const type = btn.getAttribute('data-type');
+      if (id && type) {
+        handleReaction(id, type);
+      }
+    });
+  }
+
+  // Slice items up to limit for instant render
+  const visibleItems = filtered.slice(0, historyRenderLimit);
+
   // Group by calendar day
   const groups = {};
-  filtered.forEach(item => {
+  visibleItems.forEach(item => {
     const dayKey = getDayGroupKey(item.timestamp);
     if (!groups[dayKey]) groups[dayKey] = [];
     groups[dayKey].push(item);
@@ -980,7 +1104,6 @@ function renderHistory() {
       const member = state.members[item.memberId] || { name: 'Неизвестно', avatar: '👤', color: '#94a3b8' };
       const timeStr = formatExactTime(item.timestamp);
       const durationStr = formatDurationBadge(item.durationMs);
-
       const reactions = item.reactions || { love: 0, clap: 0, star: 0 };
 
       const card = document.createElement('div');
@@ -1014,24 +1137,36 @@ function renderHistory() {
         </div>
       `;
 
-      // Attach reaction listeners
-      card.querySelectorAll('.reaction-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const id = Number(btn.getAttribute('data-id'));
-          const type = btn.getAttribute('data-type');
-          handleReaction(id, type);
-        });
-      });
-
       groupEl.appendChild(card);
     });
 
     timeline.appendChild(groupEl);
   }
+
+  // "Показать ещё" button if more items remain
+  if (filtered.length > historyRenderLimit) {
+    const moreWrap = document.createElement('div');
+    moreWrap.className = 'history-more-wrap';
+    const remaining = filtered.length - historyRenderLimit;
+    moreWrap.innerHTML = `
+      <button class="btn-history-more" type="button">
+        <span>📜</span>
+        <span>Показать ещё (+${remaining > 30 ? 30 : remaining})</span>
+      </button>
+    `;
+    const moreBtn = moreWrap.querySelector('.btn-history-more');
+    moreBtn.addEventListener('click', () => {
+      if (window.soundFx) soundFx.playClick();
+      historyRenderLimit += 30;
+      renderHistory();
+    });
+    timeline.appendChild(moreWrap);
+  }
 }
 
 // Render Tab 3: Stats & Awards
 function renderStats() {
+  dirtyTabs['tab-stats'] = false;
   const container = document.getElementById('leaderboard-list');
   const totalBadge = document.getElementById('stat-total-badge');
   const awardsContainer = document.getElementById('awards-grid');
@@ -1755,6 +1890,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       settings.activeTab = targetTabId;
       saveSettings();
+      renderActiveTab();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   });
