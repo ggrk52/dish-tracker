@@ -568,8 +568,7 @@ function applyServerState(serverState) {
     renderAll();
 
     const newWasher = getCurrentDutyMember() ? getCurrentDutyMember().name : null;
-    // CRITICAL FIX: Only play victory sound and burst confetti on actual user-initiated transitions,
-    // NEVER on initial page load / hydration!
+    // Play celebration sound and effects only on user-driven transitions, not on hydration
     if (!wasInitial && prevWasher && newWasher && prevWasher !== newWasher) {
       soundFx.playVictory();
       celebration.burst(getCurrentDutyMember().color);

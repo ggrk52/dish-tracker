@@ -1,7 +1,7 @@
 /* ========================================================
-   ЧИСТАЯ ТАРЕЛКА — ДИЗАЙН В СТИЛЕ M4RKELLKKA
+   ЧИСТАЯ ТАРЕЛКА — Таблица стилей
    Шрифты: Unbounded + Manrope + JetBrains Mono
-   Эстетика: Dark Obsidian & Architectural Light / Minimal Tech / OKLCH
+   Эстетика: Dark Obsidian & Warm Light / Minimal Tech / OKLCH
    ======================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700;800;900&display=swap');
@@ -14,7 +14,7 @@
   --font-body: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
 
-  /* Dark Theme Palette (Default, directly inspired by m4rkellkka) */
+  /* Dark Theme Palette (Default) */
   --bg: oklch(0.085 0 0);
   --bg-raised: oklch(0.115 0.003 70);
   --surface: oklch(0.155 0.006 70);
@@ -61,7 +61,7 @@
   --nav-height: 64px;
 }
 
-/* Light Theme (Preserved cleanly per user request: "только оставь светлую тему тоже") */
+/* Light Theme */
 [data-theme="light"] {
   color-scheme: light;
 
@@ -193,7 +193,7 @@ body::before {
 }
 
 /* ========================================================
-   TOP NAVIGATION BAR (m4rkellkka style)
+   TOP NAVIGATION BAR
    ======================================================== */
 .top-nav {
   display: flex;
@@ -559,7 +559,7 @@ body::before {
 }
 
 /* ========================================================
-   DUTY HERO CARD (Centerpiece in m4rkellkka Editorial Tech)
+   DUTY HERO CARD
    ======================================================== */
 .duty-hero-card {
   position: relative;
@@ -746,7 +746,7 @@ body::before {
 }
 
 /* ========================================================
-   THE PRIMARY WASH BUTTON (Ember Gradient from m4rkellkka)
+   THE PRIMARY WASH BUTTON
    ======================================================== */
 .btn-wash-main {
   width: 100%;
@@ -893,7 +893,7 @@ body::before {
 }
 
 /* ========================================================
-   SECTION & CONTENT CARDS (m4rkellkka layout)
+   SECTION & CONTENT CARDS
    ======================================================== */
 .content-card {
   position: relative;
@@ -1080,7 +1080,7 @@ body::before {
 }
 
 /* ========================================================
-   TAB 2: TIMELINE (Exact replica of m4rkellkka timeline)
+   TAB 2: TIMELINE
    ======================================================== */
 .history-filter-bar {
   display: flex;
@@ -1316,7 +1316,7 @@ body::before {
   border-radius: var(--radius-sm);
 }
 
-/* 3D Visual Commercial Podium */
+/* 3D Visual Podium */
 .podium-container {
   display: flex;
   align-items: flex-end;
