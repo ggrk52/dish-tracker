@@ -137,7 +137,7 @@ function requireAdmin(actionCallback) {
   if (window.soundFx) soundFx.playPop();
 }
 
-function openLoginModal(preselectUser = 'serezha') {
+function openLoginModal(preselectUser = 'admin') {
   const modal = document.getElementById('modal-login');
   if (!modal) return;
 
@@ -145,6 +145,38 @@ function openLoginModal(preselectUser = 'serezha') {
   const passInput = document.getElementById('login-password');
   const errorMsg = document.getElementById('login-error-msg');
   const labelEl = document.getElementById('login-label-user');
+  const userGrid = document.getElementById('login-user-grid');
+
+  if (userGrid && state && state.members) {
+    let pillsHtml = '';
+    const memberKeys = Object.keys(state.members);
+    if (!preselectUser || !state.members[preselectUser]) {
+      preselectUser = memberKeys[0] || 'admin';
+    }
+    for (const [id, m] of Object.entries(state.members)) {
+      const active = id === preselectUser ? ' active' : '';
+      const crown = m.role === 'admin' || id === 'admin' ? ' 👑' : '';
+      pillsHtml += `<button type="button" class="login-user-pill${active}" data-user="${id}">
+        <span class="login-user-avatar">${m.avatar || '👤'}</span>
+        <span class="login-user-name">${m.name}${crown}</span>
+      </button>`;
+    }
+    userGrid.innerHTML = pillsHtml;
+    userGrid.querySelectorAll('.login-user-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const u = pill.getAttribute('data-user');
+        if (usernameInput) usernameInput.value = u;
+        userGrid.querySelectorAll('.login-user-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const nameText = pill.querySelector('.login-user-name')?.textContent || u;
+        if (labelEl) labelEl.textContent = `Пароль для ${nameText}:`;
+        if (passInput) {
+          passInput.value = '';
+          passInput.focus();
+        }
+      });
+    });
+  }
 
   if (usernameInput) usernameInput.value = preselectUser;
   if (passInput) {
@@ -1006,13 +1038,32 @@ function renderHistory() {
     filtered = filtered.filter(h => h.memberId === currentHistoryFilter);
   }
 
-  // Update filter chip counters
-  document.querySelectorAll('.filter-chip').forEach(chip => {
-    const filter = chip.getAttribute('data-filter');
-    if (filter === 'all') {
-      chip.textContent = `Все (${(state.history || []).length})`;
+  // Update filter chip buttons dynamically from state.members
+  const filterBar = document.getElementById('history-filter-bar') || document.querySelector('.history-filter-bar');
+  if (filterBar && state && state.members) {
+    const totalCount = (state.history || []).length;
+    let chipsHtml = `<button class="filter-chip ${currentHistoryFilter === 'all' ? 'active' : ''}" data-filter="all">Все (${totalCount})</button>`;
+    for (const [id, m] of Object.entries(state.members)) {
+      const active = currentHistoryFilter === id ? 'active' : '';
+      chipsHtml += `<button class="filter-chip ${active}" data-filter="${id}">${m.avatar || '👤'} ${m.name}</button>`;
     }
-  });
+    filterBar.innerHTML = chipsHtml;
+    filterBar.querySelectorAll('.filter-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        currentHistoryFilter = chip.getAttribute('data-filter');
+        filterBar.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        renderHistory();
+      });
+    });
+  } else {
+    document.querySelectorAll('.filter-chip').forEach(chip => {
+      const filter = chip.getAttribute('data-filter');
+      if (filter === 'all') {
+        chip.textContent = `Все (${(state.history || []).length})`;
+      }
+    });
+  }
 
   if (filtered.length === 0) {
     timeline.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted); font-family:var(--font-mono); font-size:0.85rem;">История пуста. Начните отмечать дежурства! 🍽️</div>`;
@@ -2252,13 +2303,68 @@ document.addEventListener('DOMContentLoaded', () => {
     if (timerEl) timerEl.textContent = formatDutyDuration(state.dutyStartedAt);
   }, 60000);
 
+  // URL query params support for demo showcase & tab selection
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('demo') === '1' || urlParams.get('mock') === 'demo') {
+    settings.theme = 'dark';
+    document.documentElement.setAttribute('data-theme', 'dark');
+    state = {
+      members: {
+        admin: { id: 'admin', name: 'Администратор', role: 'admin', avatar: '👑', color: '#10b981', title: 'Координатор чистоты' },
+        user1: { id: 'user1', name: 'Дежурный 1', role: 'member', avatar: '👨‍🍳', color: '#f97316', title: 'Хранитель уюта' },
+        user2: { id: 'user2', name: 'Дежурный 2', role: 'member', avatar: '👩‍🍳', color: '#06b6d4', title: 'Гроза сковородок' },
+        user3: { id: 'user3', name: 'Дежурный 3', role: 'member', avatar: '🧑‍🍳', color: '#eab308', title: 'Мастер мыльной пены' }
+      },
+      queue: ['admin', 'user1', 'user2', 'user3'],
+      currentQueueIndex: 0,
+      dutyStartedAt: Date.now() - (2.5 * 3600 * 1000),
+      stats: { admin: 28, user1: 24, user2: 19, user3: 15 },
+      history: [
+        {
+          id: Date.now() - 3600 * 1000,
+          timestamp: Date.now() - 3600 * 1000,
+          memberId: 'user1',
+          durationMs: 5400000,
+          note: 'Блестит до скрипа ✨ Все тарелки и сковородки вымыты!',
+          reactions: { heart: 0, clap: 0, star: 0 }
+        },
+        {
+          id: Date.now() - 14 * 3600 * 1000,
+          timestamp: Date.now() - 14 * 3600 * 1000,
+          memberId: 'admin',
+          durationMs: 7200000,
+          note: 'Гора кастрюль 🍳 Помыто без напоминаний!',
+          reactions: { heart: 0, clap: 0, star: 0 }
+        },
+        {
+          id: Date.now() - 26 * 3600 * 1000,
+          timestamp: Date.now() - 26 * 3600 * 1000,
+          memberId: 'user3',
+          durationMs: 4200000,
+          note: 'Только чашки и столовые приборы ☕ Смена закрыта',
+          reactions: { heart: 0, clap: 0, star: 0 }
+        }
+      ]
+    };
+    setAuthSession({
+      user: { username: 'admin', name: 'Администратор', role: 'admin', avatar: '👑' },
+      token: 'demo-token'
+    });
+  }
+
   // Initial render
   renderAll();
 
-  // If user is not logged in yet, prompt them gently with the login modal
-  if (!isLoggedIn()) {
+  const reqTab = urlParams.get('tab');
+  if (reqTab === 'history') switchTab('tab-history');
+  else if (reqTab === 'podium' || reqTab === 'stats') switchTab('tab-stats');
+  else if (reqTab === 'duty') switchTab('tab-duty');
+
+  if (urlParams.get('modal') === 'login') {
+    setTimeout(() => openLoginModal('admin'), 100);
+  } else if (!isLoggedIn() && !urlParams.get('demo')) {
     setTimeout(() => {
-      openLoginModal('serezha');
+      openLoginModal('admin');
     }, 450);
   }
 

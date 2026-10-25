@@ -1,12 +1,13 @@
 [Unit]
-Description=Dish Tracker - Семейный график мытья посуды
+Description=Dish Tracker PRO - Умный трекер и график дежурств
 After=network.target
 
 [Service]
 Type=simple
-User=ggrk52
-WorkingDirectory=/home/ggrk52/dish-tracker
-ExecStart=/usr/bin/python3 /home/ggrk52/dish-tracker/server.py
+# Замените на имя вашего пользователя (например, pi или ubuntu):
+User=pi
+WorkingDirectory=/home/pi/dish-tracker
+ExecStart=/usr/bin/python3 /home/pi/dish-tracker/server.py
 Restart=always
 RestartSec=3
 Environment=PORT=8080

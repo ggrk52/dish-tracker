@@ -200,12 +200,12 @@
           </div>
 
           <!-- History Filters -->
-          <div class="history-filter-bar">
+          <div class="history-filter-bar" id="history-filter-bar">
             <button class="filter-chip active" data-filter="all">Все (0)</button>
-            <button class="filter-chip" data-filter="mama">👩 Мама</button>
-            <button class="filter-chip" data-filter="papa">👨 Папа</button>
-            <button class="filter-chip" data-filter="serezha">👦 Серёжа</button>
-            <button class="filter-chip" data-filter="vasya">🧒 Вася</button>
+            <button class="filter-chip" data-filter="admin">👑 Администратор</button>
+            <button class="filter-chip" data-filter="user1">👨‍🍳 Дежурный 1</button>
+            <button class="filter-chip" data-filter="user2">👩‍🍳 Дежурный 2</button>
+            <button class="filter-chip" data-filter="user3">🧑‍🍳 Дежурный 3</button>
           </div>
 
           <!-- Timeline Container -->
@@ -458,29 +458,29 @@
 
       <!-- User selection pills -->
       <div class="login-user-grid" id="login-user-grid">
-        <button type="button" class="login-user-pill" data-user="mama">
-          <span class="login-user-avatar">👩</span>
-          <span class="login-user-name">Мама</span>
+        <button type="button" class="login-user-pill active" data-user="admin">
+          <span class="login-user-avatar">👑</span>
+          <span class="login-user-name">Администратор 👑</span>
         </button>
-        <button type="button" class="login-user-pill" data-user="papa">
-          <span class="login-user-avatar">👨</span>
-          <span class="login-user-name">Папа</span>
+        <button type="button" class="login-user-pill" data-user="user1">
+          <span class="login-user-avatar">👨‍🍳</span>
+          <span class="login-user-name">Дежурный 1</span>
         </button>
-        <button type="button" class="login-user-pill active" data-user="serezha">
-          <span class="login-user-avatar">👦</span>
-          <span class="login-user-name">Серёжа 👑</span>
+        <button type="button" class="login-user-pill" data-user="user2">
+          <span class="login-user-avatar">👩‍🍳</span>
+          <span class="login-user-name">Дежурный 2</span>
         </button>
-        <button type="button" class="login-user-pill" data-user="vasya">
-          <span class="login-user-avatar">🧒</span>
-          <span class="login-user-name">Вася</span>
+        <button type="button" class="login-user-pill" data-user="user3">
+          <span class="login-user-avatar">🧑‍🍳</span>
+          <span class="login-user-name">Дежурный 3</span>
         </button>
       </div>
 
       <form id="form-login" style="margin-top: 14px;">
-        <input type="hidden" id="login-username" value="serezha">
+        <input type="hidden" id="login-username" value="admin">
 
         <div class="input-group">
-          <label class="input-label" id="login-label-user">Пароль для Серёжи:</label>
+          <label class="input-label" id="login-label-user">Пароль для Администратора:</label>
           <div class="password-input-wrap">
             <input type="password" id="login-password" class="custom-input login-input" placeholder="••••" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" autofocus required>
             <button type="button" id="btn-toggle-login-pass" class="toggle-pass-btn" aria-label="Показать пароль">👁️</button>
@@ -506,9 +506,9 @@
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
       <div class="account-profile-box">
-        <div class="account-avatar-large" id="acc-modal-avatar">👦</div>
+        <div class="account-avatar-large" id="acc-modal-avatar">👑</div>
         <div class="account-info-box">
-          <h4 class="account-name" id="acc-modal-name">Серёжа</h4>
+          <h4 class="account-name" id="acc-modal-name">Администратор</h4>
           <span class="account-role-badge" id="acc-modal-role">👑 Администратор</span>
         </div>
       </div>

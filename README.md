@@ -121,6 +121,11 @@
 
 Вызывается кнопкой **☰** в правом верхнем углу:
 
+<div align="center">
+  <img src="docs/screenshots/auth-modal.png" width="320" alt="Безопасность и PIN-авторизация" />
+  <p><em>Экран безопасного входа: выбор профиля участника и ввод индивидуального PIN-кода</em></p>
+</div>
+
 - **Управление доступом**: Отображает текущий статус (Режим просмотра / Авторизован / Администратор). Ввод пароля или PIN-кода открывает расширенные права.
 - **Сетевой статус Wi-Fi**: Показывает локальный IP-адрес домашнего сервера (например, `http://192.168.1.75:8080`) с кнопкой мгновенного копирования для подключения других домашних гаджетов.
 - **Облачная синхронизация**: Поле для ввода внешнего URL (Firebase Realtime Database или Cloudflare Worker) с индикацией подключения.
@@ -167,18 +172,19 @@ python3 server.py
 sudo nano /etc/systemd/system/dish-tracker.service
 ```
 
-Вставьте следующую конфигурацию (замените `ggrk52` на имя вашего пользователя в Linux, если оно отличается):
+Вставьте следующую конфигурацию (замените `pi` на имя вашей учетной записи Linux, если оно отличается, например `ubuntu`):
 
 ```ini
 [Unit]
-Description=Dish Tracker PRO - График дежурств по кухне
+Description=Dish Tracker PRO - Умный трекер и график дежурств
 After=network.target
 
 [Service]
 Type=simple
-User=ggrk52
-WorkingDirectory=/home/ggrk52/dish-tracker
-ExecStart=/usr/bin/python3 /home/ggrk52/dish-tracker/server.py
+# Имя пользователя в Linux (например, pi или ubuntu):
+User=pi
+WorkingDirectory=/home/pi/dish-tracker
+ExecStart=/usr/bin/python3 /home/pi/dish-tracker/server.py
 Restart=always
 RestartSec=3
 Environment=PORT=8080
@@ -254,7 +260,7 @@ PORT=3000 node server.js
 
 ### Вариант 5: Docker & Docker Compose
 
-Для любителей контейнеризации в homelab:
+Для любителей контейнеризации в homelab готовые `Dockerfile` и `docker-compose.yml` уже включены в состав репозитория:
 
 #### `Dockerfile`:
 ```dockerfile
@@ -294,7 +300,7 @@ docker compose up -d
 
 Чтобы трекер работал на смартфонах всех участников вне домашней сети (через мобильный 4G/5G интернет в любой точке мира), выберите один из удобных способов ниже:
 
-```
+```text
                   ┌─────────────────────────────────────────┐
                   │          СМАРТФОНЫ УЧАСТНИКОВ           │
                   │   (iOS Safari PWA / Android Chrome)     │
@@ -305,10 +311,10 @@ docker compose up -d
     [ ВАРИАНТ 1: ОБЛАЧНЫЙ ]                       [ ВАРИАНТ 2: СВОЙ СЕРВЕР ]
    Бессерверный (Serverless)                     Self-Hosted (Raspberry Pi/Linux)
                 │                                             │
-      ┌─────────┴─────────┐                         ┌─────────┴─────────┐
-      ▼                   ▼                         ▼                   ▼
-Firebase RTDB      Cloudflare Worker         Cloudflare Tunnel       Tailscale VPN
-(Google Cloud)     (Edge Key-Value)          (Белый домен + SSL)     (Приватная сеть)
+      ┌─────────┴─────────┐                   ┌───────────────┼───────────────┐
+      ▼                   ▼                   ▼               ▼               ▼
+Firebase RTDB      Cloudflare Worker     Cloudflared      Tailscale VPN      Ngrok
+(Google Cloud)     (Edge Key-Value)      (Белый домен)   (WireGuard Mesh)  (Экспресс)
 ```
 
 ---
@@ -400,9 +406,76 @@ npx vercel
 
 ---
 
+### 🔒 Вариант Д: Приватный VPN-доступ через Tailscale (WireGuard Mesh)
+
+Наиболее защищенный способ для дома и семьи: не требует покупки собственного домена, белого IP или проброса портов (Port Forwarding) на роутере. Все ваши устройства связываются в единую зашифрованную Mesh-сеть по протоколу WireGuard.
+
+#### 1. Установка Tailscale на сервер (Raspberry Pi / Linux):
+```bash
+# Установка официальным скриптом
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# Авторизация и запуск (перейдите по выданной ссылке для входа)
+sudo tailscale up
+```
+
+#### 2. Подключение смартфонов:
+1. Установите приложение **Tailscale** на телефоны всех участников ([iOS App Store](https://apps.apple.com/app/tailscale/id1470499037) / [Google Play](https://play.google.com/store/apps/details?id=com.tailscale.ipn)).
+2. Авторизуйтесь под той же учетной записью (Google / Apple / Microsoft / GitHub).
+
+#### 3. Вход в трекер:
+- Если в панели управления Tailscale включен **MagicDNS**, трекер доступен с любого подключенного смартфона по короткому имени вашего сервера:
+  ```text
+  http://dish-pi:8080
+  ```
+- Либо по персональному IP-адресу сервера в сети 100.x.y.z:
+  ```text
+  http://100.x.y.z:8080
+  ```
+
+*Плюсы: нулевая видимость для внешних сканеров интернета, сквозное шифрование и мгновенный отклик.*
+
+---
+
+### ⚡ Вариант Е: Экспресс-доступ через Ngrok (запуск за 30 секунд)
+
+Самый быстрый способ моментально поделиться ссылкой с HTTPS или протестировать синхронизацию на мобильном интернете без регистрации доменов.
+
+#### 1. Установка Ngrok:
+- **Linux / Raspberry Pi**:
+  ```bash
+  curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+  echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+  sudo apt update && sudo apt install ngrok
+  ```
+- **macOS**:
+  ```bash
+  brew install ngrok/ngrok/ngrok
+  ```
+
+#### 2. Авторизация токена:
+Зарегистрируйтесь на [ngrok.com](https://ngrok.com) и привяжите токен:
+```bash
+ngrok config add-authtoken ВАШ_AUTHTOKEN
+```
+
+#### 3. Проброс сервера в интернет:
+```bash
+# Запуск туннеля к локальному порту 8080:
+ngrok http 8080
+```
+*(Если вы закрепили бесплатный статический домен в личном кабинете Ngrok:)*
+```bash
+ngrok http 8080 --domain=your-subdomain.ngrok-free.app
+```
+
+Ngrok выдаст постоянный защищенный адрес вида `https://xxxx.ngrok-free.app`. Просто откройте его на телефоне и добавьте на главный экран как PWA!
+
+---
+
 ## ⚙️ Кастомизация и роли
 
-В приложении полностью отсутствует привязка к жестко зашитым именам. Вы можете легко сконфигурировать любых участников, роли, пароли и цветовые палитры.
+В приложении полностью отсутствует привязка к жестко зашитым именам. Вы можете легко сконфигурировать любых участников, роли, пароли и цветовые палитры под потребности вашей семьи или команды.
 
 ### Настройка учетных записей в `server.py` и `server.js`:
 
@@ -420,16 +493,23 @@ ACCOUNTS = {
     "user1": {
         "username": "user1",
         "password": "PIN_КОД_ПОЛЬЗОВАТЕЛЯ_1",
-        "name": "Алексей",
+        "name": "Дежурный 1",
         "role": "member",          # Обычный дежурный
         "avatar": "👨‍🍳"
     },
     "user2": {
         "username": "user2",
         "password": "PIN_КОД_ПОЛЬЗОВАТЕЛЯ_2",
-        "name": "Елена",
+        "name": "Дежурный 2",
         "role": "member",
         "avatar": "👩‍🍳"
+    },
+    "user3": {
+        "username": "user3",
+        "password": "PIN_КОД_ПОЛЬЗОВАТЕЛЯ_3",
+        "name": "Дежурный 3",
+        "role": "member",
+        "avatar": "🧑‍🍳"
     }
 }
 ```
@@ -449,25 +529,33 @@ ACCOUNTS = {
     },
     "user1": {
       "id": "user1",
-      "name": "Алексей",
+      "name": "Дежурный 1",
       "role": "Дежурный",
       "avatar": "👨‍🍳",
-      "color": "#0284c7",
-      "title": "Гроза сковородок"
+      "color": "#f97316",
+      "title": "Хранитель уюта"
     },
     "user2": {
       "id": "user2",
-      "name": "Елена",
+      "name": "Дежурный 2",
       "role": "Дежурный",
       "avatar": "👩‍🍳",
-      "color": "#ec4899",
-      "title": "Хранительница уюта"
+      "color": "#06b6d4",
+      "title": "Гроза сковородок"
+    },
+    "user3": {
+      "id": "user3",
+      "name": "Дежурный 3",
+      "role": "Дежурный",
+      "avatar": "🧑‍🍳",
+      "color": "#eab308",
+      "title": "Мастер мыльной пены"
     }
   },
-  "queue": ["admin", "user1", "user2"],
+  "queue": ["admin", "user1", "user2", "user3"],
   "currentQueueIndex": 0,
   "dutyStartedAt": 0,
-  "stats": { "admin": 0, "user1": 0, "user2": 0 },
+  "stats": { "admin": 0, "user1": 0, "user2": 0, "user3": 0 },
   "history": []
 }
 ```
@@ -501,6 +589,8 @@ dish-tracker/
 ├── server.py                # Высокопроизводительный сервер Python 3 (In-Memory, ETag 304, Gzip)
 ├── server.js                # Альтернативный сервер на Node.js
 ├── data.json                # Локальная база данных состояния (JSON)
+├── Dockerfile               # Контейнеризация приложения на базе Python 3.11 Alpine
+├── docker-compose.yml       # Развертывание в 1 команду с монтированием data.json
 │
 ├── cloudflare-worker.js     # Серверный скрипт для Cloudflare Workers KV
 ├── worker.js                # Дополнительный адаптер воркера

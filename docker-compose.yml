@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  dish-tracker:
+    build: .
+    container_name: dish-tracker
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data.json:/app/data.json
+    environment:
+      - PORT=8080
