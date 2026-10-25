@@ -125,7 +125,7 @@ function getOrCreateState() {
     }
   }
 
-  memoryState = { ...DEFAULT_STATE };
+  memoryState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   stateJsonStr = JSON.stringify(memoryState);
   stateJsonBuffer = Buffer.from(stateJsonStr);
   saveStateToDisk(memoryState);
@@ -133,8 +133,9 @@ function getOrCreateState() {
 }
 
 function saveStateToDisk(data) {
-  memoryState = { ...DEFAULT_STATE, ...data };
-  if (!data.members) memoryState.members = DEFAULT_STATE.members;
+  const base = JSON.parse(JSON.stringify(DEFAULT_STATE));
+  memoryState = { ...base, ...data };
+  if (!data.members) memoryState.members = base.members;
   stateVersion = Date.now();
   stateEtag = `"${stateVersion}"`;
   stateJsonStr = JSON.stringify(memoryState);
@@ -202,7 +203,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   // 1. API: Get Current Master State (ETag 304 + In-Memory)
-  if (url.pathname === '/api/state' && req.method === 'GET') {
+  if (url.pathname === '/api/state' && (req.method === 'GET' || req.method === 'HEAD')) {
     getOrCreateState();
 
     const reqEtag = req.headers['if-none-match'];
@@ -221,12 +222,16 @@ const server = http.createServer((req, res) => {
       'Cache-Control': 'no-cache, must-revalidate',
       'Content-Length': stateJsonBuffer.length
     });
-    res.end(stateJsonBuffer);
+    if (req.method === 'HEAD') {
+      res.end();
+    } else {
+      res.end(stateJsonBuffer);
+    }
     return;
   }
 
   // 2. API: Version
-  if (url.pathname === '/api/version' && req.method === 'GET') {
+  if (url.pathname === '/api/version' && (req.method === 'GET' || req.method === 'HEAD')) {
     getOrCreateState();
     const vBuf = Buffer.from(JSON.stringify({ version: stateVersion, etag: stateEtag }));
     res.writeHead(200, {
@@ -234,7 +239,11 @@ const server = http.createServer((req, res) => {
       'Cache-Control': 'no-cache, must-revalidate',
       'Content-Length': vBuf.length
     });
-    res.end(vBuf);
+    if (req.method === 'HEAD') {
+      res.end();
+    } else {
+      res.end(vBuf);
+    }
     return;
   }
 
@@ -319,17 +328,20 @@ const server = http.createServer((req, res) => {
           const clientHist = Array.isArray(parsedState.history) ? parsedState.history : [];
           const clientMap = new Map();
           for (const item of clientHist) {
-            if (item && item.id) clientMap.set(item.id, item);
+            if (item && item.id != null) clientMap.set(item.id, item);
           }
           if (Array.isArray(currState.history)) {
             for (const hItem of currState.history) {
               if (clientMap.has(hItem.id)) {
                 const cReactions = clientMap.get(hItem.id).reactions;
                 if (cReactions && typeof cReactions === 'object') {
+                  if (!hItem.reactions || typeof hItem.reactions !== 'object') {
+                    hItem.reactions = { love: 0, clap: 0, star: 0 };
+                  }
                   hItem.reactions = {
-                    love: Math.max(0, parseInt(cReactions.love, 10) || 0),
-                    clap: Math.max(0, parseInt(cReactions.clap, 10) || 0),
-                    star: Math.max(0, parseInt(cReactions.star, 10) || 0)
+                    love: Math.max(hItem.reactions.love || 0, Math.max(0, parseInt(cReactions.love, 10) || 0)),
+                    clap: Math.max(hItem.reactions.clap || 0, Math.max(0, parseInt(cReactions.clap, 10) || 0)),
+                    star: Math.max(hItem.reactions.star || 0, Math.max(0, parseInt(cReactions.star, 10) || 0))
                   };
                 }
               }
@@ -354,15 +366,24 @@ const server = http.createServer((req, res) => {
           const nowTs = Date.now();
           const rawPhoto = newItem.photo;
           const photoVal = (typeof rawPhoto === 'string' && rawPhoto.startsWith('data:image/')) ? rawPhoto : null;
+          const durationMs = Math.max(0, parseInt(newItem.durationMs, 10) || 0);
+          const noteVal = (newItem.note != null) ? String(newItem.note).trim() : '';
+
+          const rawReactions = (newItem.reactions && typeof newItem.reactions === 'object') ? newItem.reactions : {};
+          const historyReactions = {
+            love: Math.max(0, parseInt(rawReactions.love, 10) || 0),
+            clap: Math.max(0, parseInt(rawReactions.clap, 10) || 0),
+            star: Math.max(0, parseInt(rawReactions.star, 10) || 0)
+          };
 
           const historyEntry = {
             id: newItem.id || nowTs,
             memberId: washer,
             timestamp: newItem.timestamp || nowTs,
-            durationMs: parseInt(newItem.durationMs, 10) || 0,
-            note: String(newItem.note || '').trim(),
+            durationMs: durationMs,
+            note: noteVal,
             photo: photoVal,
-            reactions: (newItem.reactions && typeof newItem.reactions === 'object') ? newItem.reactions : { love: 0, clap: 0, star: 0 }
+            reactions: historyReactions
           };
 
           if (!currState.stats || typeof currState.stats !== 'object') currState.stats = {};
@@ -433,7 +454,7 @@ const server = http.createServer((req, res) => {
           }
         } else if (isAdmin) {
           if (action === 'reset') {
-            saveStateToDisk({ ...DEFAULT_STATE });
+            saveStateToDisk(JSON.parse(JSON.stringify(DEFAULT_STATE)));
           } else if (action === 'reorder') {
             const clientQ = parsedState.queue;
             if (Array.isArray(clientQ) && [...clientQ].sort().join(',') === [...currQ].sort().join(',')) {
@@ -561,7 +582,11 @@ const server = http.createServer((req, res) => {
       'Cache-Control': safeRelPath === 'sw.js' ? 'no-cache, must-revalidate' : 'public, max-age=600, must-revalidate',
       'Content-Length': content.length
     });
-    res.end(content);
+    if (req.method === 'HEAD') {
+      res.end();
+    } else {
+      res.end(content);
+    }
   } catch (err) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('404 Not Found');

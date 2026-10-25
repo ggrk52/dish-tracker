@@ -295,6 +295,84 @@ def test_server(server_cmd, server_name):
         assert reordered_state["queue"] == new_q, "Admin reorder failed!"
         print(f"[{server_name}]   ✅ Admin reorder passed.")
 
+        # 3.8 HEAD request check on /api/state and /index.html
+        st, hdrs, _ = request(f"{base_url}/api/state", method="HEAD")
+        assert st == 200, f"Expected 200 for HEAD /api/state, got {st}"
+        assert "ETag" in hdrs or "etag" in hdrs, "ETag missing in HEAD /api/state response"
+        st, _, _ = request(f"{base_url}/index.html", method="HEAD")
+        assert st == 200, f"Expected 200 for HEAD /index.html, got {st}"
+        print(f"[{server_name}]   ✅ HEAD requests properly handled.")
+
+        # 3.9 Robust wash parsing (durationMs: None, note: None)
+        curr_duty_id = reordered_state["queue"][reordered_state["currentQueueIndex"]]
+        robust_wash_payload = dict(reordered_state)
+        robust_wash_payload["_action"] = "wash"
+        robust_wash_id = int(time.time() * 1000) + 10
+        robust_wash_payload["history"] = [{
+            "id": robust_wash_id,
+            "memberId": curr_duty_id,
+            "durationMs": None,
+            "note": None,
+            "photo": None
+        }]
+        st, _, b = request(
+            f"{base_url}/api/state",
+            method="POST",
+            data=robust_wash_payload,
+            headers={"X-Auth-User": "serezha", "X-Auth-Token": admin_token}
+        )
+        assert st == 200, f"Expected 200 for wash with durationMs/note None, got {st}: {b.decode()}"
+        _, _, b = request(f"{base_url}/api/state")
+        robust_state = json.loads(b.decode())
+        top_wash = robust_state["history"][0]
+        assert top_wash["durationMs"] == 0, f"Expected durationMs 0, got {top_wash['durationMs']}"
+        assert top_wash["note"] == "", f"Expected empty string note, got {repr(top_wash['note'])}"
+        print(f"[{server_name}]   ✅ Robust wash field parsing (None durationMs / note) passed.")
+
+        # 3.10 Monotonic reaction race-condition protection (reactions cannot wipe each other out)
+        # Client A sends love: 1
+        r_payload_a = dict(robust_state)
+        r_payload_a["_action"] = "reaction"
+        r_payload_a["history"] = [{"id": robust_wash_id, "reactions": {"love": 1, "clap": 0, "star": 0}}]
+        st, _, _ = request(
+            f"{base_url}/api/state",
+            method="POST",
+            data=r_payload_a,
+            headers={"X-Auth-User": "mama", "X-Auth-Token": mama_token}
+        )
+        assert st == 200
+        # Client B sends star: 1 (unaware of client A's love)
+        r_payload_b = dict(robust_state)
+        r_payload_b["_action"] = "reaction"
+        r_payload_b["history"] = [{"id": robust_wash_id, "reactions": {"love": 0, "clap": 0, "star": 1}}]
+        st, _, _ = request(
+            f"{base_url}/api/state",
+            method="POST",
+            data=r_payload_b,
+            headers={"X-Auth-User": "papa", "X-Auth-Token": papa_token}
+        )
+        assert st == 200
+        # Both love and star must be preserved
+        _, _, b = request(f"{base_url}/api/state")
+        final_reactions = json.loads(b.decode())["history"][0]["reactions"]
+        assert final_reactions.get("love") == 1, f"Love reaction was overwritten! {final_reactions}"
+        assert final_reactions.get("star") == 1, f"Star reaction was not applied! {final_reactions}"
+        print(f"[{server_name}]   ✅ Monotonic reaction race condition protection passed.")
+
+        # 3.11 Admin reset deep copy check
+        st, _, _ = request(
+            f"{base_url}/api/state",
+            method="POST",
+            data={"_action": "reset"},
+            headers={"X-Auth-User": "serezha", "X-Auth-Token": admin_token}
+        )
+        assert st == 200
+        _, _, b = request(f"{base_url}/api/state")
+        reset_st = json.loads(b.decode())
+        assert reset_st["stats"] == {"mama": 0, "papa": 0, "serezha": 0, "vasya": 0}
+        assert len(reset_st["history"]) == 0
+        print(f"[{server_name}]   ✅ Admin reset deep-copy test passed.")
+
         print(f"\n🎉 ALL SECURITY CHECKS PASSED ON [{server_name}]!\n")
 
     finally:

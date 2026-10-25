@@ -40,4 +40,64 @@ assert(appJs.includes('glance-photo-badge'), 'glance-photo-badge missing in app.
 // 8. Verify photo viewer clears src on close
 assert(appJs.includes("photoViewerImg.src = '';"), 'photo-viewer-img.src cleanup on close missing');
 
-console.log('✅ ALL FRONTEND STATIC AND LOGIC ASSERTIONS PASSED!');
+// 9. Verify dynamic reaction awards in renderStats
+assert(appJs.includes('Object.keys(state.members'), 'Dynamic reactionCounts missing');
+
+// 10. Verify window.location.origin in shareFamilyReport and UI
+assert(appJs.includes('window.location.origin'), 'window.location.origin missing in app.js');
+assert(!appJs.includes('http://192.168.1.75:8080'), 'Hardcoded IP still present in app.js');
+
+// 11. Verify Firebase & Cloud dual sync
+assert(appJs.includes("isFirebase = apiUrl.includes('firebaseio.com')"), 'Firebase check missing');
+assert(appJs.includes("method: 'PUT'"), 'Firebase PUT method missing');
+
+// 12. Test Cloudflare Worker module directly
+(async () => {
+  const workerModule = await import('../worker.js');
+  const worker = workerModule.default;
+  const mockKV = {
+    data: {},
+    async get(k) { return this.data[k] || null; },
+    async put(k, v) { this.data[k] = v; }
+  };
+  const env = { DISH_KV: mockKV };
+
+  // Unauthenticated
+  const unauthReq = new Request('http://localhost/api/state', { method: 'POST', body: '{}' });
+  const res1 = await worker.fetch(unauthReq, env);
+  assert.strictEqual(res1.status, 401, 'Worker unauth POST must return 401');
+
+  // Duty wash
+  const dutyWash = new Request('http://localhost/api/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Auth-User': 'mama', 'X-Auth-Password': '1111' },
+    body: JSON.stringify({ _action: 'wash', history: [{ id: 100, note: 'Clean!' }] })
+  });
+  const res2 = await worker.fetch(dutyWash, env);
+  assert.strictEqual(res2.status, 200, 'Worker duty wash must return 200');
+
+  // Non-duty wash
+  const nonDutyWash = new Request('http://localhost/api/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Auth-User': 'mama', 'X-Auth-Password': '1111' },
+    body: JSON.stringify({ _action: 'wash', history: [{ id: 101, note: 'Again!' }] })
+  });
+  const res3 = await worker.fetch(nonDutyWash, env);
+  assert.strictEqual(res3.status, 403, 'Worker non-duty wash must return 403');
+
+  // Non-washer undo
+  const nonWasherUndo = new Request('http://localhost/api/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Auth-User': 'papa', 'X-Auth-Password': '2222' },
+    body: JSON.stringify({ _action: 'undo' })
+  });
+  const res4 = await worker.fetch(nonWasherUndo, env);
+  assert.strictEqual(res4.status, 403, 'Worker non-washer undo must return 403');
+
+  // Verify KV sanitization
+  const saved = JSON.parse(mockKV.data['dish_state']);
+  assert.strictEqual(saved._authUser, undefined, 'Auth field leaked to KV');
+  assert.strictEqual(saved._authToken, undefined, 'Auth token leaked to KV');
+
+  console.log('✅ ALL FRONTEND AND WORKER LOGIC ASSERTIONS PASSED!');
+})();

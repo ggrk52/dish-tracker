@@ -95,6 +95,14 @@ STATE_GZIP_BYTES = b""
 STATIC_CACHE = {}
 STATIC_CACHE_LOCK = threading.Lock()
 
+def safe_int(val, default=0):
+    try:
+        if val is None or isinstance(val, bool):
+            return default
+        return max(0, int(float(val)))
+    except (ValueError, TypeError):
+        return default
+
 def generate_token(username):
     acc = ACCOUNTS.get(username)
     if not acc:
@@ -303,7 +311,13 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Max-Age", "86400")
         self.end_headers()
 
+    def do_HEAD(self):
+        self.handle_get(head_only=True)
+
     def do_GET(self):
+        self.handle_get(head_only=False)
+
+    def handle_get(self, head_only=False):
         parsed = urlparse(self.path)
 
         # 1. API: Состояние (In-Memory + ETag 304 + Gzip)
@@ -335,7 +349,8 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                 self.send_header("Content-Encoding", "gzip")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
-            self.wfile.write(payload)
+            if not head_only:
+                self.wfile.write(payload)
             return
 
         # 2. API: Легковесный опрос версии (30 байт)
@@ -348,7 +363,8 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Content-Length", str(len(ver_bytes)))
             self.end_headers()
-            self.wfile.write(ver_bytes)
+            if not head_only:
+                self.wfile.write(ver_bytes)
             return
 
         # 3. Статические файлы (Gzip + ETag 304 + In-Memory RAM Cache)
@@ -373,14 +389,16 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                 self.send_header("Content-Encoding", "gzip")
             self.send_header("Content-Length", str(len(file_resp["payload"])))
             self.end_headers()
-            self.wfile.write(file_resp["payload"])
+            if not head_only:
+                self.wfile.write(file_resp["payload"])
             return
 
         # 404
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"404 Not Found")
+        if not head_only:
+            self.wfile.write(b"404 Not Found")
 
     MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB maximum payload
 
@@ -483,7 +501,7 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
 
                     # Гранулярные мутации состояния с защитой от Privilege Escalation
                     if action == "reaction":
-                        # Реакции: обновляем ТОЛЬКО реакции для существующей записи истории
+                        # Реакции: обновляем ТОЛЬКО реакции для существующей записи истории (монотонно, защищая от race conditions)
                         client_hist = state_data.get("history", [])
                         client_items_by_id = {
                             item.get("id"): item for item in client_hist
@@ -494,9 +512,13 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                             if hid in client_items_by_id:
                                 c_reactions = client_items_by_id[hid].get("reactions")
                                 if isinstance(c_reactions, dict):
+                                    existing_r = hist_item.get("reactions") if isinstance(hist_item.get("reactions"), dict) else {}
                                     hist_item["reactions"] = {
-                                        k: int(v) for k, v in c_reactions.items()
-                                        if isinstance(v, (int, float)) and v >= 0
+                                        r_key: max(
+                                            safe_int(existing_r.get(r_key, 0)),
+                                            safe_int(c_reactions.get(r_key, 0))
+                                        )
+                                        for r_key in ["love", "clap", "star"]
                                     }
                         save_state(CURRENT_STATE)
 
@@ -526,14 +548,24 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                         raw_photo = new_item.get("photo")
                         photo_val = raw_photo if (isinstance(raw_photo, str) and raw_photo.startswith("data:image/")) else None
 
+                        raw_duration = new_item.get("durationMs")
+                        duration_ms = safe_int(raw_duration, 0)
+                        note_val = str(new_item.get("note") or "").strip()
+
+                        raw_reactions = new_item.get("reactions")
+                        history_reactions = {
+                            r_key: safe_int(raw_reactions.get(r_key, 0)) if isinstance(raw_reactions, dict) else 0
+                            for r_key in ["love", "clap", "star"]
+                        }
+
                         history_entry = {
                             "id": new_item.get("id") or now_ts,
                             "memberId": washer,
                             "timestamp": new_item.get("timestamp") or now_ts,
-                            "durationMs": int(new_item.get("durationMs", 0)),
-                            "note": str(new_item.get("note", "")).strip(),
+                            "durationMs": duration_ms,
+                            "note": note_val,
                             "photo": photo_val,
-                            "reactions": new_item.get("reactions") if isinstance(new_item.get("reactions"), dict) else {"love": 0, "clap": 0, "star": 0}
+                            "reactions": history_reactions
                         }
 
                         # Атомарный расчет перехода хода

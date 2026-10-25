@@ -133,6 +133,13 @@ async function loginUser(username, password) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
+      if (!res.ok && res.status >= 500 && loginUrl !== '/api/login') {
+        res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+      }
     } catch (netErr) {
       if (loginUrl !== '/api/login') {
         res = await fetch('/api/login', {
@@ -638,9 +645,13 @@ async function fetchStateOnce(force = false) {
     }
 
     const apiUrl = getCloudApiUrl('/api/state');
+    const isFirebase = apiUrl.includes('firebaseio.com');
     let res;
     try {
-      res = await fetch(apiUrl, { headers, cache: 'no-store' });
+      res = await fetch(apiUrl, { headers: isFirebase ? {} : headers, cache: 'no-store' });
+      if (!res.ok && apiUrl !== '/api/state') {
+        res = await fetch('/api/state', { headers, cache: 'no-store' });
+      }
     } catch (netErr) {
       if (apiUrl !== '/api/state') {
         res = await fetch('/api/state', { headers, cache: 'no-store' });
@@ -710,6 +721,9 @@ async function pushStateToCloud(actionType = null) {
   }
 
   try {
+    const apiUrl = getCloudApiUrl('/api/state');
+    const isFirebase = apiUrl.includes('firebaseio.com');
+
     const payload = {
       ...state,
       _authUser: session.user.username,
@@ -722,14 +736,32 @@ async function pushStateToCloud(actionType = null) {
       'X-Auth-Token': encodeURIComponent(session.token)
     };
 
-    const apiUrl = getCloudApiUrl('/api/state');
-    let res;
-    try {
-      res = await fetch(apiUrl, {
+    let fetchOpts;
+    if (isFirebase) {
+      // Firebase Realtime Database: PUT replaces the node, only standard headers allowed by Firebase CORS
+      fetchOpts = {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state)
+      };
+    } else {
+      fetchOpts = {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
-      });
+      };
+    }
+
+    let res;
+    try {
+      res = await fetch(apiUrl, fetchOpts);
+      if (!res.ok && res.status !== 401 && res.status !== 403 && apiUrl !== '/api/state') {
+        res = await fetch('/api/state', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+      }
     } catch (netErr) {
       if (apiUrl !== '/api/state') {
         res = await fetch('/api/state', {

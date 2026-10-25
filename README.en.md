@@ -108,7 +108,7 @@ A playful leaderboard that celebrates everyone's effort:
   🥉 Member 2: 19 washes (22%)
   ✨ Member 3: 15 washes (17%)
   ━━━━━━━━━━━━━━━━━━━━━
-  📱 Live Tracker: http://192.168.1.75:8080
+  📱 Live Tracker: http://raspberrypi.local:8080
   ```
 
 ---
@@ -116,7 +116,7 @@ A playful leaderboard that celebrates everyone's effort:
 ### 4. ⚙️ Settings, Network & Backups
 Accessible via the hamburger menu **☰** in the top right corner:
 - **Access Status**: Displays your current permission level (Guest / Member / Admin). Entering your PIN unlocks full editing.
-- **Local Wi-Fi IP**: Shows the server's local address (e.g. `http://192.168.1.75:8080`) with a one-tap copy button for other devices in the house.
+- **Local Wi-Fi IP**: Shows the server's local address (e.g. `http://raspberrypi.local:8080`) with a one-tap copy button for other devices in the house.
 - **Cloud Sync URL**: Input field for your external database (Firebase Realtime DB or Cloudflare Worker) with a live connection dot.
 - **JSON Backup & Restore**:
   - `📥 Export Backup (JSON)`: Download a full snapshot of all settings, accounts, queue order, and history.
