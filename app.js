@@ -43,6 +43,7 @@ let wakeLockSentinel = null;
 let isInitialSyncDone = false;
 let isFetchingState = false;
 let currentHistoryFilter = 'all';
+let currentAttachedPhoto = null;
 
 // ========================================================
 // AUTH & FAMILY ACCOUNTS SYSTEM
@@ -721,7 +722,7 @@ function getCurrentDutyMember() {
   return state.members[memberId] || state.members.mama;
 }
 
-function handleWashDone(note = '') {
+function handleWashDone(note = '', photo = null) {
   const currentMember = getCurrentDutyMember();
   const user = getCurrentUser();
   const isAdm = isAdmin();
@@ -759,6 +760,7 @@ function handleWashDone(note = '') {
     timestamp: now,
     durationMs: durationMs,
     note: (note || '').trim(),
+    photo: (typeof photo === 'string' && photo.startsWith('data:image/')) ? photo : null,
     reactions: { love: 0, clap: 0, star: 0 }
   };
   state.history.unshift(historyItem);
@@ -783,7 +785,8 @@ function handleWashDone(note = '') {
 
   // Show Toast
   const verb = (currentMember.id === 'mama') ? 'помыла' : 'помыл';
-  showUndoToast(`${currentMember.name} ${verb} посуду! Отлично! 🧼`);
+  const photoText = historyItem.photo ? ' 📸 с фото чистоты!' : '';
+  showUndoToast(`${currentMember.name} ${verb} посуду!${photoText} Отлично! 🧼`);
 }
 
 function handleUndo() {
@@ -1015,6 +1018,7 @@ function renderActivityGlance() {
       <div style="display:flex; align-items:center; gap:8px;">
         <span>${member.avatar}</span>
         <span style="font-weight:700;">${member.name}</span>
+        ${item.photo ? '<span title="С фото чистоты" style="font-size:0.8rem; line-height:1;">📸</span>' : ''}
         ${item.note ? `<span style="font-size:0.75rem; color:var(--text-muted);">(${escapeHtml(item.note)})</span>` : ''}
       </div>
       <span style="font-size:0.75rem; color:var(--text-muted);">${dateStr}</span>
@@ -1069,10 +1073,22 @@ function renderHistory() {
     return;
   }
 
-  // Delegate reaction clicks once on timeline container (zero memory leak, zero per-item listener loop)
+  // Delegate reaction & photo viewer clicks once on timeline container (zero memory leak)
   if (!timeline._hasReactionDelegation) {
     timeline._hasReactionDelegation = true;
     timeline.addEventListener('click', (e) => {
+      const photoTrigger = e.target.closest('.timeline-photo-box');
+      if (photoTrigger) {
+        const id = Number(photoTrigger.getAttribute('data-id'));
+        if (id) {
+          const item = (state.history || []).find(h => h.id === id);
+          if (item && item.photo) {
+            openPhotoViewer(item);
+            return;
+          }
+        }
+      }
+
       const btn = e.target.closest('.reaction-btn');
       if (!btn) return;
       const id = Number(btn.getAttribute('data-id'));
@@ -1126,6 +1142,18 @@ function renderHistory() {
         </div>
 
         ${item.note ? `<div class="timeline-card-note">💬 ${escapeHtml(item.note)}</div>` : ''}
+
+        ${item.photo ? `
+          <div class="timeline-photo-box" data-id="${item.id}" role="button" tabindex="0" title="Нажмите, чтобы открыть фото">
+            <span class="timeline-photo-badge">📸 Фото чистоты</span>
+            <div class="timeline-photo-thumb-wrap">
+              <img src="${item.photo}" alt="Фото чистой раковины от ${escapeHtml(member.name)}" class="timeline-photo-thumb" loading="lazy">
+              <div class="timeline-photo-overlay">
+                <span class="timeline-photo-zoom-icon">🔍 Открыть</span>
+              </div>
+            </div>
+          </div>
+        ` : ''}
 
         <div class="history-reactions-row">
           <button class="reaction-btn" data-id="${item.id}" data-type="love" title="Сказать спасибо">
@@ -1386,7 +1414,7 @@ function exportHistoryToCSV() {
     return;
   }
 
-  let csv = 'Дата,Время,Кто мыл,Время дежурства,Заметка,Лайки ❤️\n';
+  let csv = 'Дата,Время,Кто мыл,Время дежурства,Заметка,Фото чистоты,Лайки ❤️\n';
   state.history.forEach(h => {
     const d = new Date(h.timestamp);
     const dateStr = d.toLocaleDateString('ru-RU');
@@ -1394,8 +1422,9 @@ function exportHistoryToCSV() {
     const name = state.members[h.memberId]?.name || h.memberId;
     const dur = formatDurationBadge(h.durationMs) || '0';
     const note = (h.note || '').replace(/"/g, '""');
+    const hasPhoto = h.photo ? 'Да 📸' : 'Нет';
     const loves = h.reactions ? (h.reactions.love || 0) : 0;
-    csv += `"${dateStr}","${timeStr}","${name}","${dur}","${note}","${loves}"\n`;
+    csv += `"${dateStr}","${timeStr}","${name}","${dur}","${note}","${hasPhoto}","${loves}"\n`;
   });
 
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -1738,9 +1767,134 @@ function renderProfileUI() {
 }
 
 // ========================================================
+// PHOTO PROOF OF CLEANLINESS (Пункт 8)
+// ========================================================
+function resetNotePhoto() {
+  currentAttachedPhoto = null;
+  const photoInput = document.getElementById('note-photo-input');
+  if (photoInput) photoInput.value = '';
+  const previewWrap = document.getElementById('note-photo-preview-wrap');
+  if (previewWrap) previewWrap.classList.add('hidden');
+  const previewImg = document.getElementById('note-photo-preview-img');
+  if (previewImg) previewImg.src = '';
+  const sizeBadge = document.getElementById('note-photo-size-badge');
+  if (sizeBadge) sizeBadge.textContent = '0 KB ✨';
+  const btnTrigger = document.getElementById('btn-trigger-photo');
+  if (btnTrigger) btnTrigger.classList.remove('hidden');
+}
+
+function compressImage(file, maxWidth = 800, maxHeight = 800, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      reject(new Error('Выбранный файл не является изображением'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Не удалось загрузить изображение'));
+      img.onload = () => {
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / height > maxWidth / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Не удалось получить 2D контекст canvas'));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let dataUrl = canvas.toDataURL('image/webp', quality);
+        if (!dataUrl || !dataUrl.startsWith('data:image/webp')) {
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+
+        const commaIdx = dataUrl.indexOf(',');
+        const base64Len = commaIdx >= 0 ? dataUrl.length - (commaIdx + 1) : dataUrl.length;
+        const sizeBytes = Math.round((base64Len * 3) / 4);
+        const sizeKb = Math.max(1, Math.round(sizeBytes / 1024));
+
+        resolve({
+          dataUrl,
+          width,
+          height,
+          sizeKb
+        });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function openPhotoViewer(item) {
+  const modal = document.getElementById('modal-photo-viewer');
+  if (!modal || !item || !item.photo) return;
+
+  const member = (state.members && state.members[item.memberId]) || { name: 'Дежурный', avatar: '👤', color: 'var(--accent)' };
+  const d = new Date(item.timestamp);
+  const dateStr = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  const timeStr = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+  const imgEl = document.getElementById('photo-viewer-img');
+  if (imgEl) {
+    imgEl.src = item.photo;
+  }
+
+  const titleEl = document.getElementById('photo-viewer-title');
+  if (titleEl) {
+    titleEl.textContent = `Фото чистоты ✨`;
+  }
+
+  const metaEl = document.getElementById('photo-viewer-meta');
+  if (metaEl) {
+    metaEl.textContent = `${member.avatar} ${member.name} • ${dateStr}, ${timeStr}`;
+  }
+
+  const captionEl = document.getElementById('photo-viewer-caption');
+  if (captionEl) {
+    if (item.note && item.note.trim()) {
+      captionEl.textContent = `💬 ${item.note.trim()}`;
+      captionEl.classList.remove('hidden');
+    } else {
+      captionEl.textContent = '';
+      captionEl.classList.add('hidden');
+    }
+  }
+
+  if (window.soundFx && typeof window.soundFx.playPop === 'function') {
+    soundFx.playPop();
+  }
+
+  openModal('modal-photo-viewer');
+}
+
+window.resetNotePhoto = resetNotePhoto;
+window.compressImage = compressImage;
+window.openPhotoViewer = openPhotoViewer;
+
+// ========================================================
 // MODAL CONTROLS
 // ========================================================
 function openModal(id) {
+  if (id === 'modal-note') {
+    resetNotePhoto();
+  }
   const modal = document.getElementById(id);
   if (modal) {
     modal.classList.remove('hidden');
@@ -1753,6 +1907,7 @@ function closeAllModals() {
     m.classList.add('hidden');
   });
   document.body.style.overflow = '';
+  resetNotePhoto();
 }
 
 // Expose globally so inline onclick="closeAllModals()" always works
@@ -2151,11 +2306,60 @@ document.addEventListener('DOMContentLoaded', () => {
       if (user.username === currentMember.id || isAdm) {
         const textEl = document.getElementById('modal-note-text');
         if (textEl) textEl.value = '';
+        resetNotePhoto();
         openModal('modal-note');
       } else {
         showToast(`Сейчас дежурит ${currentMember.name}!`, '⏳');
         if (window.soundFx) soundFx.playPop();
       }
+    });
+  }
+
+  // Photo Attachment in Note Modal
+  const btnTriggerPhoto = document.getElementById('btn-trigger-photo');
+  const notePhotoInput = document.getElementById('note-photo-input');
+  if (btnTriggerPhoto && notePhotoInput) {
+    btnTriggerPhoto.addEventListener('click', () => {
+      if (window.soundFx) soundFx.playClick();
+      notePhotoInput.click();
+    });
+  }
+
+  if (notePhotoInput) {
+    notePhotoInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      try {
+        const result = await compressImage(file, 800, 800, 0.7);
+        currentAttachedPhoto = result.dataUrl;
+
+        const previewWrap = document.getElementById('note-photo-preview-wrap');
+        const previewImg = document.getElementById('note-photo-preview-img');
+        const sizeBadge = document.getElementById('note-photo-size-badge');
+        const btnTrigger = document.getElementById('btn-trigger-photo');
+
+        if (previewImg) previewImg.src = result.dataUrl;
+        if (sizeBadge) sizeBadge.textContent = `${result.sizeKb} KB ✨`;
+        if (previewWrap) previewWrap.classList.remove('hidden');
+        if (btnTrigger) btnTrigger.classList.add('hidden');
+
+        if (window.soundFx) soundFx.playClick();
+        if (window.soundFx && soundFx.playHaptic) soundFx.playHaptic('light');
+      } catch (err) {
+        console.error('Photo compression error:', err);
+        showToast('Не удалось обработать фото', '⚠️');
+        if (window.soundFx) soundFx.playPop();
+      }
+    });
+  }
+
+  const btnRemovePhoto = document.getElementById('btn-remove-photo');
+  if (btnRemovePhoto) {
+    btnRemovePhoto.addEventListener('click', (e) => {
+      e.stopPropagation();
+      resetNotePhoto();
+      if (window.soundFx) soundFx.playPop();
     });
   }
 
@@ -2175,8 +2379,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btnSubmitNoteWash.addEventListener('click', () => {
       const textEl = document.getElementById('modal-note-text');
       const note = textEl ? textEl.value : '';
+      const photo = currentAttachedPhoto;
       closeAllModals();
-      handleWashDone(note);
+      handleWashDone(note, photo);
     });
   }
 

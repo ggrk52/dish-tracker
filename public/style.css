@@ -2265,3 +2265,305 @@ body::before {
     font-size: 4.4rem;
   }
 }
+
+/* ========================================== */
+/* PHOTO PROOF OF CLEANLINESS (Пункт 8)        */
+/* ========================================== */
+
+.note-photo-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.btn-attach-photo {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 180ms ease;
+  touch-action: manipulation;
+}
+
+.btn-attach-photo:hover {
+  background: var(--surface-hover);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.btn-attach-photo:active {
+  transform: scale(0.98);
+}
+
+.btn-attach-photo.hidden {
+  display: none !important;
+}
+
+.note-photo-preview-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  animation: fadeIn 200ms ease;
+}
+
+.note-photo-preview-wrap.hidden {
+  display: none !important;
+}
+
+.note-photo-thumb-box {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid var(--line-strong);
+  background: #000;
+}
+
+.note-photo-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.btn-remove-photo {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 22px;
+  height: 22px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  border: none;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 140ms ease, background 140ms ease;
+  touch-action: manipulation;
+}
+
+.btn-remove-photo:hover {
+  background: var(--danger);
+  transform: scale(1.1);
+}
+
+.note-photo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.note-photo-badge {
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--teal);
+  background: oklch(0.76 0.105 190 / 0.12);
+  border: 1px solid oklch(0.76 0.105 190 / 0.28);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.note-photo-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* History Timeline Photo Preview */
+.timeline-photo-box {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.timeline-photo-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--teal);
+  background: oklch(0.76 0.105 190 / 0.1);
+  border: 1px solid oklch(0.76 0.105 190 / 0.25);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  transition: all 160ms ease;
+}
+
+.timeline-photo-box:hover .timeline-photo-badge {
+  background: oklch(0.76 0.105 190 / 0.2);
+  border-color: var(--teal);
+}
+
+.timeline-photo-thumb-wrap {
+  position: relative;
+  width: 220px;
+  max-width: 100%;
+  height: 140px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.timeline-photo-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 220ms ease;
+}
+
+.timeline-photo-box:hover .timeline-photo-thumb {
+  transform: scale(1.03);
+}
+
+.timeline-photo-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.timeline-photo-box:hover .timeline-photo-overlay {
+  opacity: 1;
+}
+
+.timeline-photo-zoom-icon {
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.85rem;
+  backdrop-filter: blur(4px);
+}
+
+/* Lightbox Modal (modal-photo-viewer) */
+.photo-lightbox-card {
+  max-width: 600px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: 0 30px 90px var(--shadow);
+}
+
+.photo-lightbox-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.photo-lightbox-icon {
+  font-size: 1.5rem;
+}
+
+.photo-lightbox-meta-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.photo-lightbox-meta-block h3 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink-strong);
+  margin: 0;
+}
+
+.photo-lightbox-sub {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.photo-lightbox-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.photo-lightbox-frame {
+  width: 100%;
+  max-height: 65vh;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+}
+
+.photo-lightbox-img {
+  width: 100%;
+  max-height: 65vh;
+  object-fit: contain;
+  display: block;
+}
+
+.photo-lightbox-caption {
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--surface);
+  border-left: 3px solid var(--amber);
+  padding: 10px 14px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  line-height: 1.45;
+}
+
+.photo-lightbox-caption.hidden {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .photo-lightbox-card {
+    padding: 16px;
+    max-height: 92vh;
+  }
+  .photo-lightbox-frame {
+    max-height: 55vh;
+  }
+  .photo-lightbox-img {
+    max-height: 55vh;
+  }
+  .timeline-photo-thumb-wrap {
+    width: 100%;
+    height: 160px;
+  }
+}

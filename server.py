@@ -346,13 +346,27 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"404 Not Found")
 
+    def read_body(self):
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (ValueError, TypeError):
+            length = 0
+        if length <= 0:
+            return ""
+        body_bytes = bytearray()
+        while len(body_bytes) < length:
+            chunk = self.rfile.read(min(length - len(body_bytes), 65536))
+            if not chunk:
+                break
+            body_bytes.extend(chunk)
+        return body_bytes.decode("utf-8", errors="replace")
+
     def do_POST(self):
         parsed = urlparse(self.path)
 
         # 1. Login Endpoint
         if parsed.path == "/api/login":
-            length = int(self.headers.get("Content-Length", 0))
-            raw_body = self.rfile.read(length).decode("utf-8")
+            raw_body = self.read_body()
             try:
                 creds = json.loads(raw_body)
                 user = (creds.get("username") or "").strip().lower()
@@ -399,8 +413,7 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
 
         # 2. State Update Endpoint
         if parsed.path == "/api/state":
-            length = int(self.headers.get("Content-Length", 0))
-            raw_body = self.rfile.read(length).decode("utf-8")
+            raw_body = self.read_body()
             try:
                 state_data = json.loads(raw_body)
 
@@ -469,7 +482,10 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
 
                 save_state(state_data)
 
-                res_body = json.dumps({"success": True}).encode("utf-8")
+                with STATE_LOCK:
+                    current_etag = STATE_ETAG
+
+                res_body = json.dumps({"success": True, "etag": current_etag}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Access-Control-Allow-Origin", "*")

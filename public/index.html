@@ -388,6 +388,26 @@
         <button class="note-tag-btn" type="button" data-tag="Помыл(а) без напоминаний! 🌟">Без напоминаний 🌟</button>
       </div>
       <textarea id="modal-note-text" class="custom-textarea" rows="3" placeholder="Что было помыто или комментарий..."></textarea>
+      
+      <!-- Photo Attachment -->
+      <div class="note-photo-section">
+        <input type="file" id="note-photo-input" accept="image/*" capture="environment" style="display:none">
+        <button type="button" id="btn-trigger-photo" class="btn-attach-photo">
+          <span>📷</span>
+          <span>Добавить фото раковины</span>
+        </button>
+        <div id="note-photo-preview-wrap" class="note-photo-preview-wrap hidden">
+          <div class="note-photo-thumb-box">
+            <img id="note-photo-preview-img" src="" alt="Превью фото" class="note-photo-thumb">
+            <button type="button" id="btn-remove-photo" class="btn-remove-photo" title="Удалить фото" aria-label="Удалить фото">&times;</button>
+          </div>
+          <div class="note-photo-info">
+            <span class="note-photo-badge" id="note-photo-size-badge">0 KB ✨</span>
+            <span class="note-photo-hint">Фото чистоты прикреплено!</span>
+          </div>
+        </div>
+      </div>
+
       <button id="btn-submit-note-wash" class="primary-btn-block" type="button">Помыто! Засчитать 🧼</button>
     </div>
   </div>
@@ -521,6 +541,31 @@
     </div>
   </div>
 
-  <script src="app.js?v=5.0"></script>
+  <!-- ========================================== -->
+  <!-- MODAL: PHOTO VIEWER (Lightbox)             -->
+  <!-- ========================================== -->
+  <div id="modal-photo-viewer" class="modal-backdrop hidden photo-lightbox-backdrop">
+    <div class="modal-card photo-lightbox-card">
+      <div class="modal-head">
+        <div class="photo-lightbox-author">
+          <span class="photo-lightbox-icon">📸</span>
+          <div class="photo-lightbox-meta-block">
+            <h3 id="photo-viewer-title">Фото чистоты ✨</h3>
+            <span class="photo-lightbox-sub" id="photo-viewer-meta"></span>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
+      </div>
+
+      <div class="photo-lightbox-body">
+        <div class="photo-lightbox-frame">
+          <img id="photo-viewer-img" src="" alt="Фото чистоты раковины" class="photo-lightbox-img">
+        </div>
+        <div id="photo-viewer-caption" class="photo-lightbox-caption hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=5.1"></script>
 </body>
 </html>
