@@ -278,8 +278,23 @@ const server = http.createServer((req, res) => {
   // 4. API: Update State
   if (url.pathname === '/api/state' && req.method === 'POST') {
     let body = '';
-    req.on('data', chunk => { body += chunk; });
+    let bodyLen = 0;
+    const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
+    let overflow = false;
+
+    req.on('data', chunk => {
+      bodyLen += chunk.length;
+      if (bodyLen > MAX_BODY_SIZE) {
+        overflow = true;
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'Payload too large' }));
+        req.destroy();
+        return;
+      }
+      body += chunk;
+    });
     req.on('end', () => {
+      if (overflow) return;
       try {
         const parsedState = JSON.parse(body);
 
@@ -337,7 +352,7 @@ const server = http.createServer((req, res) => {
           saveStateToDisk(parsedState);
           broadcastUpdate(stateJsonStr);
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ success: true }));
+          res.end(JSON.stringify({ success: true, etag: stateEtag }));
           return;
         }
         throw new Error('Invalid state structure');

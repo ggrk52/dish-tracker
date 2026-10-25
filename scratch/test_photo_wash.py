@@ -158,14 +158,34 @@ def run_tests():
             assert e.code == 304, f"Expected 304 Not Modified, got {e.code}"
         print("[TEST] 304 Not Modified cache check PASSED.")
 
+        # 7. Test Payload Over Limit Guard
+        overlimit_req = urllib.request.Request(
+            f"{base_url}/api/state",
+            data=b"{}",
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(15 * 1024 * 1024),
+                "X-Auth-User": "serezha",
+                "X-Auth-Token": token
+            }
+        )
+        try:
+            with urllib.request.urlopen(overlimit_req) as resp:
+                assert False, "Expected 400 for payload exceeding 10 MB!"
+        except urllib.error.HTTPError as e:
+            assert e.code == 400, f"Expected 400 Bad Request, got {e.code}"
+            print("[TEST] Payload size guard PASSED (exceeding 10 MB returned 400).")
+
         print("\n🎉 ALL TESTS PASSED SUCCESSFULLY! Photo wash payload operates smoothly.")
 
     finally:
         # Terminate test server
         server_proc.terminate()
         try:
-            server_proc.wait(timeout=3)
-        except subprocess.TimeoutExpired:
+            out, err = server_proc.communicate(timeout=3)
+            if err:
+                print("[SERVER STDERR]:\n", err.decode("utf-8", errors="replace"))
+        except Exception:
             server_proc.kill()
 
         # Restore data.json

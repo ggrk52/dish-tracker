@@ -346,6 +346,8 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"404 Not Found")
 
+    MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB maximum payload
+
     def read_body(self):
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -353,6 +355,8 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
             length = 0
         if length <= 0:
             return ""
+        if length > self.MAX_BODY_SIZE:
+            raise ValueError(f"Payload too large ({length} bytes > {self.MAX_BODY_SIZE} bytes)")
         body_bytes = bytearray()
         while len(body_bytes) < length:
             chunk = self.rfile.read(min(length - len(body_bytes), 65536))
@@ -366,8 +370,8 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
 
         # 1. Login Endpoint
         if parsed.path == "/api/login":
-            raw_body = self.read_body()
             try:
+                raw_body = self.read_body()
                 creds = json.loads(raw_body)
                 user = (creds.get("username") or "").strip().lower()
                 password = str(creds.get("password") or "").strip()
@@ -406,15 +410,17 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Connection", "close")
                 self.send_header("Content-Length", str(len(err_body)))
                 self.end_headers()
                 self.wfile.write(err_body)
+                self.close_connection = True
                 return
 
         # 2. State Update Endpoint
         if parsed.path == "/api/state":
-            raw_body = self.read_body()
             try:
+                raw_body = self.read_body()
                 state_data = json.loads(raw_body)
 
                 # Проверка авторизации
@@ -497,9 +503,11 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Connection", "close")
                 self.send_header("Content-Length", str(len(err_body)))
                 self.end_headers()
                 self.wfile.write(err_body)
+                self.close_connection = True
             return
 
         self.send_response(404)

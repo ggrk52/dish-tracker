@@ -274,7 +274,17 @@ function saveState(skipCloudPush = false, actionType = null, memberId = null) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
-    console.error('Failed to save state to localStorage:', e);
+    console.warn('Failed to save full state to localStorage, attempting lean fallback without older photos:', e);
+    try {
+      // Keep full history records, but retain heavy base64 photos only for the 15 most recent entries in localStorage
+      const leanState = {
+        ...state,
+        history: (state.history || []).map((h, idx) => (idx < 15 ? h : { ...h, photo: null }))
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(leanState));
+    } catch (e2) {
+      console.error('Failed to save even lean state to localStorage:', e2);
+    }
   }
 
   if (!skipCloudPush) {
@@ -1018,11 +1028,20 @@ function renderActivityGlance() {
       <div style="display:flex; align-items:center; gap:8px;">
         <span>${member.avatar}</span>
         <span style="font-weight:700;">${member.name}</span>
-        ${item.photo ? '<span title="С фото чистоты" style="font-size:0.8rem; line-height:1;">📸</span>' : ''}
+        ${item.photo ? `<button type="button" class="glance-photo-badge" title="Посмотреть фото чистоты" aria-label="Посмотреть фото чистоты">📸</button>` : ''}
         ${item.note ? `<span style="font-size:0.75rem; color:var(--text-muted);">(${escapeHtml(item.note)})</span>` : ''}
       </div>
       <span style="font-size:0.75rem; color:var(--text-muted);">${dateStr}</span>
     `;
+
+    const photoBtn = div.querySelector('.glance-photo-badge');
+    if (photoBtn) {
+      photoBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openPhotoViewer(item);
+      });
+    }
+
     glanceBox.appendChild(div);
   });
 }
@@ -1095,6 +1114,22 @@ function renderHistory() {
       const type = btn.getAttribute('data-type');
       if (id && type) {
         handleReaction(id, type);
+      }
+    });
+
+    timeline.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        const photoTrigger = e.target.closest('.timeline-photo-box');
+        if (photoTrigger) {
+          e.preventDefault();
+          const id = Number(photoTrigger.getAttribute('data-id'));
+          if (id) {
+            const item = (state.history || []).find(h => h.id === id);
+            if (item && item.photo) {
+              openPhotoViewer(item);
+            }
+          }
+        }
       }
     });
   }
@@ -1769,7 +1804,10 @@ function renderProfileUI() {
 // ========================================================
 // PHOTO PROOF OF CLEANLINESS (Пункт 8)
 // ========================================================
+let photoCompressionCounter = 0;
+
 function resetNotePhoto() {
+  photoCompressionCounter++;
   currentAttachedPhoto = null;
   const photoInput = document.getElementById('note-photo-input');
   if (photoInput) photoInput.value = '';
@@ -1780,65 +1818,130 @@ function resetNotePhoto() {
   const sizeBadge = document.getElementById('note-photo-size-badge');
   if (sizeBadge) sizeBadge.textContent = '0 KB ✨';
   const btnTrigger = document.getElementById('btn-trigger-photo');
-  if (btnTrigger) btnTrigger.classList.remove('hidden');
+  if (btnTrigger) {
+    btnTrigger.classList.remove('hidden');
+    btnTrigger.disabled = false;
+    btnTrigger.innerHTML = '<span>📷</span><span>Добавить фото раковины</span>';
+  }
+  const btnSubmit = document.getElementById('btn-submit-note-wash');
+  if (btnSubmit) {
+    btnSubmit.disabled = false;
+    btnSubmit.style.opacity = '';
+    btnSubmit.style.pointerEvents = '';
+  }
 }
 
 function compressImage(file, maxWidth = 800, maxHeight = 800, quality = 0.7) {
-  return new Promise((resolve, reject) => {
-    if (!file || !file.type.startsWith('image/')) {
+  return new Promise(async (resolve, reject) => {
+    const isImage = file && (
+      (file.type && file.type.startsWith('image/')) ||
+      (file.name && /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name))
+    );
+    if (!isImage) {
       reject(new Error('Выбранный файл не является изображением'));
       return;
     }
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Не удалось загрузить изображение'));
-      img.onload = () => {
-        let width = img.naturalWidth || img.width;
-        let height = img.naturalHeight || img.height;
 
-        if (width > maxWidth || height > maxHeight) {
-          if (width / height > maxWidth / maxHeight) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
+    try {
+      let source = null;
+      let naturalWidth = 0;
+      let naturalHeight = 0;
+      let cleanup = null;
+
+      // 1. Try createImageBitmap with automatic EXIF orientation (supported in modern browsers)
+      if (typeof window.createImageBitmap === 'function') {
+        try {
+          const bitmap = await window.createImageBitmap(file, { imageOrientation: 'from-image' });
+          source = bitmap;
+          naturalWidth = bitmap.width;
+          naturalHeight = bitmap.height;
+          cleanup = () => {
+            if (typeof bitmap.close === 'function') bitmap.close();
+          };
+        } catch (bmErr) {
+          source = null;
+        }
+      }
+
+      // 2. Fallback to HTMLImageElement via object URL or FileReader
+      if (!source) {
+        const img = new Image();
+        const objectUrl = (window.URL && typeof window.URL.createObjectURL === 'function')
+          ? window.URL.createObjectURL(file)
+          : null;
+
+        await new Promise((imgResolve, imgReject) => {
+          img.onload = () => imgResolve();
+          img.onerror = () => imgReject(new Error('Не удалось загрузить изображение'));
+          if (objectUrl) {
+            img.src = objectUrl;
           } else {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
+            const reader = new FileReader();
+            reader.onload = (e) => { img.src = e.target.result; };
+            reader.onerror = () => imgReject(new Error('Не удалось прочитать файл'));
+            reader.readAsDataURL(file);
           }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Не удалось получить 2D контекст canvas'));
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0, width, height);
-
-        let dataUrl = canvas.toDataURL('image/webp', quality);
-        if (!dataUrl || !dataUrl.startsWith('data:image/webp')) {
-          dataUrl = canvas.toDataURL('image/jpeg', quality);
-        }
-
-        const commaIdx = dataUrl.indexOf(',');
-        const base64Len = commaIdx >= 0 ? dataUrl.length - (commaIdx + 1) : dataUrl.length;
-        const sizeBytes = Math.round((base64Len * 3) / 4);
-        const sizeKb = Math.max(1, Math.round(sizeBytes / 1024));
-
-        resolve({
-          dataUrl,
-          width,
-          height,
-          sizeKb
         });
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+
+        source = img;
+        naturalWidth = img.naturalWidth || img.width;
+        naturalHeight = img.naturalHeight || img.height;
+        cleanup = () => {
+          if (objectUrl && window.URL && typeof window.URL.revokeObjectURL === 'function') {
+            window.URL.revokeObjectURL(objectUrl);
+          }
+        };
+      }
+
+      let width = naturalWidth;
+      let height = naturalHeight;
+
+      if (width > maxWidth || height > maxHeight) {
+        if (width / height > maxWidth / maxHeight) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, width);
+      canvas.height = Math.max(1, height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        if (cleanup) cleanup();
+        reject(new Error('Не удалось получить 2D контекст canvas'));
+        return;
+      }
+
+      // Fill white background for transparent PNG/WebP falling back to JPEG
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+
+      if (cleanup) cleanup();
+
+      let dataUrl = canvas.toDataURL('image/webp', quality);
+      if (!dataUrl || !dataUrl.startsWith('data:image/webp')) {
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
+
+      const commaIdx = dataUrl.indexOf(',');
+      const base64Len = commaIdx >= 0 ? dataUrl.length - (commaIdx + 1) : dataUrl.length;
+      const sizeBytes = Math.round((base64Len * 3) / 4);
+      const sizeKb = Math.max(1, Math.round(sizeBytes / 1024));
+
+      resolve({
+        dataUrl,
+        width: canvas.width,
+        height: canvas.height,
+        sizeKb
+      });
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -1908,6 +2011,8 @@ function closeAllModals() {
   });
   document.body.style.overflow = '';
   resetNotePhoto();
+  const photoViewerImg = document.getElementById('photo-viewer-img');
+  if (photoViewerImg) photoViewerImg.src = '';
 }
 
 // Expose globally so inline onclick="closeAllModals()" always works
@@ -2320,6 +2425,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const notePhotoInput = document.getElementById('note-photo-input');
   if (btnTriggerPhoto && notePhotoInput) {
     btnTriggerPhoto.addEventListener('click', () => {
+      if (btnTriggerPhoto.disabled) return;
       if (window.soundFx) soundFx.playClick();
       notePhotoInput.click();
     });
@@ -2330,25 +2436,60 @@ document.addEventListener('DOMContentLoaded', () => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
 
+      const jobId = ++photoCompressionCounter;
+      const btnSubmit = document.getElementById('btn-submit-note-wash');
+      if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.style.opacity = '0.6';
+        btnSubmit.style.pointerEvents = 'none';
+      }
+      if (btnTriggerPhoto) {
+        btnTriggerPhoto.disabled = true;
+        btnTriggerPhoto.innerHTML = '<span>⏳</span><span>Сжимаем фото...</span>';
+      }
+
       try {
         const result = await compressImage(file, 800, 800, 0.7);
+        if (jobId !== photoCompressionCounter) return;
+
         currentAttachedPhoto = result.dataUrl;
 
         const previewWrap = document.getElementById('note-photo-preview-wrap');
         const previewImg = document.getElementById('note-photo-preview-img');
         const sizeBadge = document.getElementById('note-photo-size-badge');
-        const btnTrigger = document.getElementById('btn-trigger-photo');
 
         if (previewImg) previewImg.src = result.dataUrl;
         if (sizeBadge) sizeBadge.textContent = `${result.sizeKb} KB ✨`;
         if (previewWrap) previewWrap.classList.remove('hidden');
-        if (btnTrigger) btnTrigger.classList.add('hidden');
+        if (btnTriggerPhoto) {
+          btnTriggerPhoto.classList.add('hidden');
+          btnTriggerPhoto.disabled = false;
+          btnTriggerPhoto.innerHTML = '<span>📷</span><span>Добавить фото раковины</span>';
+        }
+
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.style.opacity = '';
+          btnSubmit.style.pointerEvents = '';
+        }
 
         if (window.soundFx) soundFx.playClick();
         if (window.soundFx && soundFx.playHaptic) soundFx.playHaptic('light');
       } catch (err) {
         console.error('Photo compression error:', err);
+        if (jobId !== photoCompressionCounter) return;
+
         showToast('Не удалось обработать фото', '⚠️');
+        if (btnTriggerPhoto) {
+          btnTriggerPhoto.disabled = false;
+          btnTriggerPhoto.innerHTML = '<span>📷</span><span>Добавить фото раковины</span>';
+        }
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.style.opacity = '';
+          btnSubmit.style.pointerEvents = '';
+        }
+        if (notePhotoInput) notePhotoInput.value = '';
         if (window.soundFx) soundFx.playPop();
       }
     });
