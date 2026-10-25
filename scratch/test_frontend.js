@@ -5,8 +5,11 @@ const assert = require('assert');
 
 console.log('[TEST] Checking app.js photo functions and edge cases...');
 
-// Read app.js
-const appJs = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+// Read app.js (prioritizing public/app.js)
+const appJsPath = fs.existsSync(path.join(__dirname, '..', 'public', 'app.js'))
+  ? path.join(__dirname, '..', 'public', 'app.js')
+  : path.join(__dirname, '..', 'app.js');
+const appJs = fs.readFileSync(appJsPath, 'utf8');
 
 // 1. Verify photoCompressionCounter exists and resetNotePhoto increments it
 assert(appJs.includes('let photoCompressionCounter = 0;'), 'photoCompressionCounter missing');

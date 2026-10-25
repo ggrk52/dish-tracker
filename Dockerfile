@@ -2,10 +2,18 @@ FROM python:3.11-alpine
 
 WORKDIR /app
 
+# Создаем непривилегированного пользователя appuser
+RUN adduser -D -u 1000 appuser
+
 # Копируем файлы проекта
-COPY index.html app.js style.css sw.js manifest.json server.py server.js data.json ./
-COPY icons/ ./icons/
+COPY public/ ./public/
+COPY server.py server.js data.json ./
 COPY docs/ ./docs/
+
+# Назначаем права пользователю appuser
+RUN chown -R appuser:appuser /app
+
+USER appuser
 
 # Порт по умолчанию
 ENV PORT=8080

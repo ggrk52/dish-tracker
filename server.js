@@ -13,7 +13,7 @@ const zlib = require('zlib');
 
 const PORT = process.env.PORT || 8080;
 const DATA_FILE = path.join(__dirname, 'data.json');
-const PUBLIC_DIR = __dirname;
+const PUBLIC_DIR = path.resolve(__dirname, 'public');
 const AUTH_SECRET = 'family_dish_secret_2026';
 
 // Семейные аккаунты
@@ -184,7 +184,7 @@ function getLocalIp() {
       }
     }
   }
-  return '192.168.1.75';
+  return '127.0.0.1';
 }
 
 const server = http.createServer((req, res) => {
@@ -307,55 +307,164 @@ const server = http.createServer((req, res) => {
 
         const isAdmin = (acc.role === 'admin');
         const authUser = acc.username;
+        const action = parsedState._action || '';
 
-        if (!isAdmin) {
-          const currState = getOrCreateState();
-          const currQ = currState.queue || [];
-          const currIdx = currState.currentQueueIndex || 0;
-          const currDutyId = (currQ && currIdx < currQ.length) ? currQ[currIdx] : null;
+        const currState = getOrCreateState();
+        const currQ = currState.queue || [];
+        const currIdx = currState.currentQueueIndex || 0;
+        const currDutyId = (currQ && currIdx < currQ.length) ? currQ[currIdx] : null;
 
-          if (JSON.stringify(parsedState.queue) !== JSON.stringify(currQ)) {
-            res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
-            res.end(JSON.stringify({ error: 'Изменять порядок очереди может только Серёжа (Администратор)' }));
-            return;
+        if (action === 'reaction') {
+          // Реакции: обновляем ТОЛЬКО реакции для существующей записи истории
+          const clientHist = Array.isArray(parsedState.history) ? parsedState.history : [];
+          const clientMap = new Map();
+          for (const item of clientHist) {
+            if (item && item.id) clientMap.set(item.id, item);
           }
-
-          const action = parsedState._action || '';
-          const isDutyWash = (['wash', 'wash_done'].includes(action) && authUser && currDutyId && authUser === currDutyId);
-          const isReaction = (action === 'reaction');
-          const isUndo = (action === 'undo');
-
-          if (!isDutyWash && !isReaction && !isUndo) {
-            let errMsg = '';
-            if (['skip', 'swap', 'reorder', 'reset'].includes(action)) {
-              errMsg = 'Управлять очередью и настройками может только Серёжа (Администратор)';
-            } else {
-              const currDutyName = (currState.members && currState.members[currDutyId]) ? currState.members[currDutyId].name : 'дежурного';
-              errMsg = `Сейчас очередь дежурить: ${currDutyName}. Отметить помывку может только он(а)`;
+          if (Array.isArray(currState.history)) {
+            for (const hItem of currState.history) {
+              if (clientMap.has(hItem.id)) {
+                const cReactions = clientMap.get(hItem.id).reactions;
+                if (cReactions && typeof cReactions === 'object') {
+                  hItem.reactions = {
+                    love: Math.max(0, parseInt(cReactions.love, 10) || 0),
+                    clap: Math.max(0, parseInt(cReactions.clap, 10) || 0),
+                    star: Math.max(0, parseInt(cReactions.star, 10) || 0)
+                  };
+                }
+              }
             }
+          }
+          saveStateToDisk(currState);
+        } else if (['wash', 'wash_done'].includes(action)) {
+          const isDuty = (currDutyId && authUser === currDutyId);
+          if (!isAdmin && !isDuty) {
+            const currDutyName = (currState.members && currState.members[currDutyId]) ? currState.members[currDutyId].name : 'дежурного';
             res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
-            res.end(JSON.stringify({ error: errMsg }));
+            res.end(JSON.stringify({ error: `Сейчас очередь дежурить: ${currDutyName}. Отметить помывку может только он(а)` }));
             return;
           }
-        }
 
-        if (parsedState && typeof parsedState === 'object') {
-          delete parsedState._authUser;
-          delete parsedState._authToken;
-          delete parsedState._authPass;
-          delete parsedState._adminPassword;
-          delete parsedState._memberId;
-          delete parsedState._action;
-        }
+          const clientHist = Array.isArray(parsedState.history) ? parsedState.history : [];
+          const newItem = clientHist.length > 0 ? clientHist[0] : {};
+          const washer = (isAdmin && newItem.memberId && currState.members && currState.members[newItem.memberId])
+            ? newItem.memberId
+            : (currDutyId || authUser);
 
-        if (parsedState && parsedState.queue) {
-          saveStateToDisk(parsedState);
-          broadcastUpdate(stateJsonStr);
-          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ success: true, etag: stateEtag }));
+          const nowTs = Date.now();
+          const rawPhoto = newItem.photo;
+          const photoVal = (typeof rawPhoto === 'string' && rawPhoto.startsWith('data:image/')) ? rawPhoto : null;
+
+          const historyEntry = {
+            id: newItem.id || nowTs,
+            memberId: washer,
+            timestamp: newItem.timestamp || nowTs,
+            durationMs: parseInt(newItem.durationMs, 10) || 0,
+            note: String(newItem.note || '').trim(),
+            photo: photoVal,
+            reactions: (newItem.reactions && typeof newItem.reactions === 'object') ? newItem.reactions : { love: 0, clap: 0, star: 0 }
+          };
+
+          if (!currState.stats || typeof currState.stats !== 'object') currState.stats = {};
+          currState.stats[washer] = (currState.stats[washer] || 0) + 1;
+
+          if (!Array.isArray(currState.history)) currState.history = [];
+          currState.history.unshift(historyEntry);
+          if (currState.history.length > 200) currState.history.pop();
+
+          if (currQ.length > 0) {
+            currState.currentQueueIndex = (currIdx + 1) % currQ.length;
+          }
+          currState.dutyStartedAt = nowTs;
+          saveStateToDisk(currState);
+        } else if (action === 'undo') {
+          if (!Array.isArray(currState.history) || currState.history.length === 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'Нет записей о помывке для отмены' }));
+            return;
+          }
+
+          const lastWash = currState.history[0];
+          const lastWasher = lastWash.memberId;
+          if (!isAdmin && authUser !== lastWasher) {
+            res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'Отменить помывку может только тот, кто помыл, или Серёжа (Администратор)' }));
+            return;
+          }
+
+          currState.history.shift();
+          if (currState.stats && currState.stats[lastWasher]) {
+            currState.stats[lastWasher] = Math.max(0, currState.stats[lastWasher] - 1);
+          }
+          if (currQ.length > 0) {
+            currState.currentQueueIndex = (currIdx - 1 + currQ.length) % currQ.length;
+          }
+          if (currState.history.length > 0) {
+            currState.dutyStartedAt = currState.history[0].timestamp || Date.now();
+          } else {
+            currState.dutyStartedAt = Date.now();
+          }
+          saveStateToDisk(currState);
+        } else if (['skip', 'swap'].includes(action)) {
+          const isDuty = (currDutyId && authUser === currDutyId);
+          if (!isAdmin && !isDuty) {
+            res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'Пропустить или передать очередь может только текущий дежурный или Серёжа (Администратор)' }));
+            return;
+          }
+
+          if (action === 'skip') {
+            if (currQ.length > 0) {
+              currState.currentQueueIndex = (currIdx + 1) % currQ.length;
+            }
+            currState.dutyStartedAt = Date.now();
+            saveStateToDisk(currState);
+          } else if (action === 'swap') {
+            const clientQ = parsedState.queue;
+            if (Array.isArray(clientQ) && [...clientQ].sort().join(',') === [...currQ].sort().join(',')) {
+              currState.queue = [...clientQ];
+              currState.dutyStartedAt = Date.now();
+              saveStateToDisk(currState);
+            } else {
+              res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+              res.end(JSON.stringify({ error: 'Некорректный состав очереди' }));
+              return;
+            }
+          }
+        } else if (isAdmin) {
+          if (action === 'reset') {
+            saveStateToDisk({ ...DEFAULT_STATE });
+          } else if (action === 'reorder') {
+            const clientQ = parsedState.queue;
+            if (Array.isArray(clientQ) && [...clientQ].sort().join(',') === [...currQ].sort().join(',')) {
+              currState.queue = [...clientQ];
+              saveStateToDisk(currState);
+            } else {
+              res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+              res.end(JSON.stringify({ error: 'Некорректная очередь' }));
+              return;
+            }
+          } else {
+            // Full state update
+            const cleanCopy = { ...parsedState };
+            delete cleanCopy._authUser;
+            delete cleanCopy._authToken;
+            delete cleanCopy._authPass;
+            delete cleanCopy._adminPassword;
+            delete cleanCopy._memberId;
+            delete cleanCopy._action;
+            saveStateToDisk(cleanCopy);
+          }
+        } else {
+          res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'Управлять очередью и настройками может только Серёжа (Администратор)' }));
           return;
         }
-        throw new Error('Invalid state structure');
+
+        broadcastUpdate(stateJsonStr);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: true, etag: stateEtag }));
+        return;
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ error: e.message }));
@@ -389,17 +498,51 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 6. Static Files Serving
-  let filePath = path.join(PUBLIC_DIR, url.pathname === '/' ? 'index.html' : url.pathname);
-  if (!fs.existsSync(filePath)) {
-    filePath = path.join(PUBLIC_DIR, 'public', url.pathname);
-    if (!fs.existsSync(filePath)) {
-      filePath = path.join(PUBLIC_DIR, 'index.html');
-    }
+  // 6. Static Files Serving (Strictly from public/ with Path Traversal Protection)
+  const ALLOWED_EXTS = new Set(['.html', '.css', '.js', '.json', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.ico']);
+  const FORBIDDEN_NAMES = new Set(['server.js', 'server.py', 'data.json', 'Dockerfile', 'docker-compose.yml']);
+
+  let reqPath = '/index.html';
+  try {
+    reqPath = decodeURIComponent(url.pathname);
+  } catch (e) {}
+  if (!reqPath || reqPath === '/') {
+    reqPath = '/index.html';
+  }
+
+  const safeRelPath = reqPath.replace(/^\/+/, '');
+  const resolvedPath = path.resolve(PUBLIC_DIR, safeRelPath);
+
+  // Path Traversal Check: must reside within PUBLIC_DIR
+  if (!resolvedPath.startsWith(PUBLIC_DIR + path.sep) && resolvedPath !== PUBLIC_DIR) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('403 Forbidden');
+    return;
+  }
+
+  const ext = path.extname(resolvedPath).toLowerCase();
+  const baseName = path.basename(resolvedPath);
+
+  if (!ALLOWED_EXTS.has(ext) || baseName.startsWith('.') || (ext === '.json' && baseName !== 'manifest.json') || FORBIDDEN_NAMES.has(baseName)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('404 Not Found');
+    return;
+  }
+
+  if (!fs.existsSync(resolvedPath)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('404 Not Found');
+    return;
   }
 
   try {
-    const stat = fs.statSync(filePath);
+    const stat = fs.statSync(resolvedPath);
+    if (!stat.isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('404 Not Found');
+      return;
+    }
+
     const fileEtag = `"${Math.floor(stat.mtimeMs)}-${stat.size}"`;
     const reqEtag = req.headers['if-none-match'];
 
@@ -409,14 +552,13 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-    const content = fs.readFileSync(filePath);
+    const content = fs.readFileSync(resolvedPath);
 
     res.writeHead(200, {
       'Content-Type': contentType,
       'ETag': fileEtag,
-      'Cache-Control': url.pathname === '/sw.js' ? 'no-cache, must-revalidate' : 'public, max-age=600, must-revalidate',
+      'Cache-Control': safeRelPath === 'sw.js' ? 'no-cache, must-revalidate' : 'public, max-age=600, must-revalidate',
       'Content-Length': content.length
     });
     res.end(content);

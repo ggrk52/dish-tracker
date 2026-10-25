@@ -20,9 +20,20 @@ from urllib.parse import urlparse, unquote
 
 PORT = int(os.environ.get("PORT", 8080))
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+PUBLIC_DIR = os.path.abspath(os.path.join(BASE_DIR, "public"))
 DATA_FILE = os.path.join(BASE_DIR, "data.json")
 
 AUTH_SECRET = "family_dish_secret_2026"
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 # Семейные учетные записи
 ACCOUNTS = {
@@ -73,7 +84,7 @@ DEFAULT_STATE = {
 # --------------------------------------------------------
 # In-Memory State & Caching Engine
 # --------------------------------------------------------
-STATE_LOCK = threading.Lock()
+STATE_LOCK = threading.RLock()
 CURRENT_STATE = None
 STATE_VERSION = 1
 STATE_ETAG = '"v1"'
@@ -149,16 +160,16 @@ def get_or_create_state():
     with STATE_LOCK:
         return copy.deepcopy(CURRENT_STATE)
 
-def save_state(data):
+def save_state(data=None):
     global CURRENT_STATE, STATE_VERSION, STATE_ETAG, STATE_JSON_STR, STATE_JSON_BYTES, STATE_GZIP_BYTES
     with STATE_LOCK:
-        merged = dict(DEFAULT_STATE)
-        if isinstance(data, dict):
-            merged.update(data)
-            if "members" not in data or not data["members"]:
-                merged["members"] = DEFAULT_STATE["members"]
-
-        CURRENT_STATE = merged
+        if data is not None and data is not CURRENT_STATE:
+            merged = dict(DEFAULT_STATE)
+            if isinstance(data, dict):
+                merged.update(data)
+                if "members" not in data or not data["members"]:
+                    merged["members"] = DEFAULT_STATE["members"]
+            CURRENT_STATE = merged
         STATE_VERSION = int(time.time() * 1000)
         STATE_ETAG = f'"{STATE_VERSION}"'
         STATE_JSON_STR = json.dumps(CURRENT_STATE, ensure_ascii=False)
@@ -176,15 +187,40 @@ def save_state(data):
 
 # --------------------------------------------------------
 # Высокоскоростной кэш статических файлов (RAM)
+# Раздача строго из public/ с защитой от Path Traversal
 # --------------------------------------------------------
+ALLOWED_EXTENSIONS = {
+    ".html", ".css", ".js", ".json", ".svg", ".png", ".jpg", ".jpeg", ".webp", ".ico"
+}
+FORBIDDEN_FILES = {
+    "server.py", "server.js", "data.json", "Dockerfile", "docker-compose.yml"
+}
+
 def get_static_file_response(rel_path, accept_gzip=False):
-    clean_path = rel_path.lstrip("/")
+    clean_path = unquote(rel_path.split("?")[0].split("#")[0]).lstrip("/")
     if not clean_path or clean_path == "/":
         clean_path = "index.html"
 
-    # Защита от выхода за пределы директории
-    abs_path = os.path.abspath(os.path.join(BASE_DIR, clean_path))
-    if not abs_path.startswith(BASE_DIR) or not os.path.isfile(abs_path):
+    # Строгая защита от Path Traversal через os.path.commonpath
+    abs_path = os.path.abspath(os.path.join(PUBLIC_DIR, clean_path))
+    try:
+        if os.path.commonpath([PUBLIC_DIR, abs_path]) != PUBLIC_DIR:
+            return None
+    except ValueError:
+        return None
+
+    if not os.path.isfile(abs_path):
+        return None
+
+    ext = os.path.splitext(abs_path)[1].lower()
+    filename = os.path.basename(abs_path)
+
+    # Белый список расширений и защита исходников
+    if ext not in ALLOWED_EXTENSIONS or filename.startswith("."):
+        return None
+    if ext == ".json" and filename != "manifest.json":
+        return None
+    if filename in FORBIDDEN_FILES or ext in {".py", ".sh", ".env", ".tmp", ".bak"}:
         return None
 
     try:
@@ -220,7 +256,7 @@ def get_static_file_response(rel_path, accept_gzip=False):
                 return None
 
             gzip_bytes = None
-            if len(raw_bytes) > 180 and any(clean_path.endswith(ext) for ext in [".html", ".js", ".css", ".svg", ".json"]):
+            if len(raw_bytes) > 180 and any(clean_path.endswith(e) for e in [".html", ".js", ".css", ".svg", ".json"]):
                 gzip_bytes = gzip.compress(raw_bytes, compresslevel=6)
 
             cached = {
@@ -253,7 +289,7 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=BASE_DIR, **kwargs)
+        super().__init__(*args, directory=PUBLIC_DIR, **kwargs)
 
     def log_message(self, format, *args):
         # Отключаем спам в консоль
@@ -437,58 +473,195 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
 
                 is_admin = (acc["role"] == "admin")
                 auth_user = acc["username"]
-
-                # Проверка прав доступа
-                if not is_admin:
-                    curr_state = get_or_create_state()
-                    curr_q = curr_state.get("queue", [])
-                    curr_idx = curr_state.get("currentQueueIndex", 0)
-                    curr_duty_id = curr_q[curr_idx] if curr_q and curr_idx < len(curr_q) else None
-
-                    # Изменение очереди разрешено только Админу (Серёже)
-                    if state_data.get("queue") != curr_q:
-                        err_body = json.dumps({"error": "Изменять порядок очереди может только Серёжа (Администратор)"}, ensure_ascii=False).encode("utf-8")
-                        self.send_response(403)
-                        self.send_header("Content-Type", "application/json; charset=utf-8")
-                        self.send_header("Access-Control-Allow-Origin", "*")
-                        self.send_header("Content-Length", str(len(err_body)))
-                        self.end_headers()
-                        self.wfile.write(err_body)
-                        return
-
-                    # Обычные члены семьи могут только подтвердить свою очередь, поставить реакцию или отменить
-                    action = state_data.get("_action", "")
-                    is_duty_wash = (action in ["wash", "wash_done"] and auth_user and curr_duty_id and auth_user == curr_duty_id)
-                    is_reaction = (action == "reaction")
-                    is_undo = (action == "undo")
-
-                    if not is_duty_wash and not is_reaction and not is_undo:
-                        if action in ["skip", "swap", "reorder", "reset"]:
-                            err_msg = "Управлять очередью и настройками может только Серёжа (Администратор)"
-                        else:
-                            curr_duty_name = curr_state.get("members", {}).get(curr_duty_id, {}).get("name", "дежурного")
-                            err_msg = f"Сейчас очередь дежурить: {curr_duty_name}. Отметить помывку может только он(а)"
-                        err_body = json.dumps({"error": err_msg}, ensure_ascii=False).encode("utf-8")
-                        self.send_response(403)
-                        self.send_header("Content-Type", "application/json; charset=utf-8")
-                        self.send_header("Access-Control-Allow-Origin", "*")
-                        self.send_header("Content-Length", str(len(err_body)))
-                        self.end_headers()
-                        self.wfile.write(err_body)
-                        return
-
-                # Удаляем служебные поля авторизации перед сохранением
-                if isinstance(state_data, dict):
-                    state_data.pop("_authUser", None)
-                    state_data.pop("_authToken", None)
-                    state_data.pop("_authPass", None)
-                    state_data.pop("_adminPassword", None)
-                    state_data.pop("_memberId", None)
-                    state_data.pop("_action", None)
-
-                save_state(state_data)
+                action = state_data.get("_action", "")
 
                 with STATE_LOCK:
+                    global CURRENT_STATE
+                    curr_q = list(CURRENT_STATE.get("queue", []))
+                    curr_idx = CURRENT_STATE.get("currentQueueIndex", 0)
+                    curr_duty_id = curr_q[curr_idx] if (curr_q and 0 <= curr_idx < len(curr_q)) else None
+
+                    # Гранулярные мутации состояния с защитой от Privilege Escalation
+                    if action == "reaction":
+                        # Реакции: обновляем ТОЛЬКО реакции для существующей записи истории
+                        client_hist = state_data.get("history", [])
+                        client_items_by_id = {
+                            item.get("id"): item for item in client_hist
+                            if isinstance(item, dict) and "id" in item
+                        }
+                        for hist_item in CURRENT_STATE.get("history", []):
+                            hid = hist_item.get("id")
+                            if hid in client_items_by_id:
+                                c_reactions = client_items_by_id[hid].get("reactions")
+                                if isinstance(c_reactions, dict):
+                                    hist_item["reactions"] = {
+                                        k: int(v) for k, v in c_reactions.items()
+                                        if isinstance(v, (int, float)) and v >= 0
+                                    }
+                        save_state(CURRENT_STATE)
+
+                    elif action in ["wash", "wash_done"]:
+                        # Проверка: дежурный или админ
+                        is_duty = (curr_duty_id and auth_user == curr_duty_id)
+                        if not is_admin and not is_duty:
+                            curr_duty_name = CURRENT_STATE.get("members", {}).get(curr_duty_id, {}).get("name", "дежурного")
+                            err_body = json.dumps({"error": f"Сейчас очередь дежурить: {curr_duty_name}. Отметить помывку может только он(а)"}, ensure_ascii=False).encode("utf-8")
+                            self.send_response(403)
+                            self.send_header("Content-Type", "application/json; charset=utf-8")
+                            self.send_header("Access-Control-Allow-Origin", "*")
+                            self.send_header("Content-Length", str(len(err_body)))
+                            self.end_headers()
+                            self.wfile.write(err_body)
+                            return
+
+                        client_hist = state_data.get("history", [])
+                        new_item = client_hist[0] if (isinstance(client_hist, list) and client_hist) else {}
+
+                        if is_admin and new_item.get("memberId") in CURRENT_STATE.get("members", {}):
+                            washer = new_item.get("memberId")
+                        else:
+                            washer = curr_duty_id or auth_user
+
+                        now_ts = int(time.time() * 1000)
+                        raw_photo = new_item.get("photo")
+                        photo_val = raw_photo if (isinstance(raw_photo, str) and raw_photo.startswith("data:image/")) else None
+
+                        history_entry = {
+                            "id": new_item.get("id") or now_ts,
+                            "memberId": washer,
+                            "timestamp": new_item.get("timestamp") or now_ts,
+                            "durationMs": int(new_item.get("durationMs", 0)),
+                            "note": str(new_item.get("note", "")).strip(),
+                            "photo": photo_val,
+                            "reactions": new_item.get("reactions") if isinstance(new_item.get("reactions"), dict) else {"love": 0, "clap": 0, "star": 0}
+                        }
+
+                        # Атомарный расчет перехода хода
+                        if "stats" not in CURRENT_STATE or not isinstance(CURRENT_STATE["stats"], dict):
+                            CURRENT_STATE["stats"] = {}
+                        CURRENT_STATE["stats"][washer] = CURRENT_STATE["stats"].get(washer, 0) + 1
+
+                        if "history" not in CURRENT_STATE or not isinstance(CURRENT_STATE["history"], list):
+                            CURRENT_STATE["history"] = []
+                        CURRENT_STATE["history"].insert(0, history_entry)
+                        if len(CURRENT_STATE["history"]) > 200:
+                            CURRENT_STATE["history"].pop()
+
+                        if curr_q:
+                            CURRENT_STATE["currentQueueIndex"] = (curr_idx + 1) % len(curr_q)
+                        CURRENT_STATE["dutyStartedAt"] = now_ts
+                        save_state(CURRENT_STATE)
+
+                    elif action == "undo":
+                        # Отмена: только админ или тот, кто выполнил последнюю помывку
+                        hist = CURRENT_STATE.get("history", [])
+                        if not hist:
+                            err_body = json.dumps({"error": "Нет записей о помывке для отмены"}, ensure_ascii=False).encode("utf-8")
+                            self.send_response(400)
+                            self.send_header("Content-Type", "application/json; charset=utf-8")
+                            self.send_header("Access-Control-Allow-Origin", "*")
+                            self.send_header("Content-Length", str(len(err_body)))
+                            self.end_headers()
+                            self.wfile.write(err_body)
+                            return
+
+                        last_wash = hist[0]
+                        last_washer = last_wash.get("memberId")
+                        if not is_admin and auth_user != last_washer:
+                            err_body = json.dumps({"error": "Отменить помывку может только тот, кто помыл, или Серёжа (Администратор)"}, ensure_ascii=False).encode("utf-8")
+                            self.send_response(403)
+                            self.send_header("Content-Type", "application/json; charset=utf-8")
+                            self.send_header("Access-Control-Allow-Origin", "*")
+                            self.send_header("Content-Length", str(len(err_body)))
+                            self.end_headers()
+                            self.wfile.write(err_body)
+                            return
+
+                        CURRENT_STATE["history"].pop(0)
+                        if "stats" in CURRENT_STATE and last_washer in CURRENT_STATE["stats"]:
+                            CURRENT_STATE["stats"][last_washer] = max(0, CURRENT_STATE["stats"][last_washer] - 1)
+                        if curr_q:
+                            CURRENT_STATE["currentQueueIndex"] = (curr_idx - 1) % len(curr_q)
+                        if CURRENT_STATE.get("history"):
+                            CURRENT_STATE["dutyStartedAt"] = CURRENT_STATE["history"][0].get("timestamp", int(time.time() * 1000))
+                        else:
+                            CURRENT_STATE["dutyStartedAt"] = int(time.time() * 1000)
+                        save_state(CURRENT_STATE)
+
+                    elif action in ["skip", "swap"]:
+                        # Пропуск/обмен: только текущий дежурный или админ
+                        is_duty = (curr_duty_id and auth_user == curr_duty_id)
+                        if not is_admin and not is_duty:
+                            err_body = json.dumps({"error": "Пропустить или передать очередь может только текущий дежурный или Серёжа (Администратор)"}, ensure_ascii=False).encode("utf-8")
+                            self.send_response(403)
+                            self.send_header("Content-Type", "application/json; charset=utf-8")
+                            self.send_header("Access-Control-Allow-Origin", "*")
+                            self.send_header("Content-Length", str(len(err_body)))
+                            self.end_headers()
+                            self.wfile.write(err_body)
+                            return
+
+                        if action == "skip":
+                            if curr_q:
+                                CURRENT_STATE["currentQueueIndex"] = (curr_idx + 1) % len(curr_q)
+                            CURRENT_STATE["dutyStartedAt"] = int(time.time() * 1000)
+                            save_state(CURRENT_STATE)
+                        elif action == "swap":
+                            client_q = state_data.get("queue")
+                            if isinstance(client_q, list) and sorted(client_q) == sorted(curr_q):
+                                CURRENT_STATE["queue"] = list(client_q)
+                                CURRENT_STATE["dutyStartedAt"] = int(time.time() * 1000)
+                                save_state(CURRENT_STATE)
+                            else:
+                                err_body = json.dumps({"error": "Некорректный состав очереди"}, ensure_ascii=False).encode("utf-8")
+                                self.send_response(400)
+                                self.send_header("Content-Type", "application/json; charset=utf-8")
+                                self.send_header("Access-Control-Allow-Origin", "*")
+                                self.send_header("Content-Length", str(len(err_body)))
+                                self.end_headers()
+                                self.wfile.write(err_body)
+                                return
+
+                    elif is_admin:
+                        # Действия администратора
+                        if action == "reset":
+                            CURRENT_STATE = copy.deepcopy(DEFAULT_STATE)
+                        elif action == "reorder":
+                            client_q = state_data.get("queue")
+                            if isinstance(client_q, list) and sorted(client_q) == sorted(curr_q):
+                                CURRENT_STATE["queue"] = list(client_q)
+                            else:
+                                err_body = json.dumps({"error": "Некорректная очередь"}, ensure_ascii=False).encode("utf-8")
+                                self.send_response(400)
+                                self.send_header("Content-Type", "application/json; charset=utf-8")
+                                self.send_header("Access-Control-Allow-Origin", "*")
+                                self.send_header("Content-Length", str(len(err_body)))
+                                self.end_headers()
+                                self.wfile.write(err_body)
+                                return
+                        else:
+                            # Полное обновление состояния администратором
+                            merged = dict(DEFAULT_STATE)
+                            if isinstance(state_data, dict):
+                                clean_copy = dict(state_data)
+                                for k in ["_authUser", "_authToken", "_authPass", "_adminPassword", "_memberId", "_action"]:
+                                    clean_copy.pop(k, None)
+                                merged.update(clean_copy)
+                                if "members" not in clean_copy or not clean_copy["members"]:
+                                    merged["members"] = DEFAULT_STATE["members"]
+                            CURRENT_STATE = merged
+                        save_state(CURRENT_STATE)
+
+                    else:
+                        err_body = json.dumps({"error": "Управлять очередью и настройками может только Серёжа (Администратор)"}, ensure_ascii=False).encode("utf-8")
+                        self.send_response(403)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.send_header("Content-Length", str(len(err_body)))
+                        self.end_headers()
+                        self.wfile.write(err_body)
+                        return
+
                     current_etag = STATE_ETAG
 
                 res_body = json.dumps({"success": True, "etag": current_etag}).encode("utf-8")
@@ -520,11 +693,13 @@ def run():
     httpd = ThreadingHTTPServer(server_address, DishDutyHandler)
     httpd.daemon_threads = True
 
+    local_ip = get_local_ip()
     print("\n======================================================")
     print("🍽️   ЧИСТАЯ ТАРЕЛКА — Сервер на Python 3 для Raspberry Pi")
     print("⚡  Ultra-Fast: In-Memory + ETag 304 + HTTP/1.1 + Gzip")
     print("======================================================")
-    print(f"📱  Доступно по адресу: http://192.168.1.75:{PORT}")
+    print(f"📱  Доступно по адресу: http://{local_ip}:{PORT}")
+    print(f"💻  Локальный адрес:   http://localhost:{PORT}")
     print(f"💾  База данных: {DATA_FILE}")
     print("======================================================\n")
 

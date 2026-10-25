@@ -98,13 +98,52 @@ window.getCurrentUser = getCurrentUser;
 window.isAdmin = isAdmin;
 window.getCurrentUserProfile = getCurrentUserProfile;
 
+function getCloudApiUrl(endpoint = '/api/state') {
+  const raw = (settings && settings.firebaseUrl ? settings.firebaseUrl : '').trim();
+  if (!raw) return endpoint;
+
+  let base = raw.replace(/\/+$/, '');
+
+  // If user entered full URL including /api/state
+  if (base.endsWith('/api/state')) {
+    if (endpoint === '/api/login') {
+      return base.replace(/\/api\/state$/, '/api/login');
+    }
+    return base;
+  }
+
+  // If Firebase Realtime Database
+  if (base.includes('firebaseio.com')) {
+    if (endpoint === '/api/state') {
+      return `${base}/dish_state.json`;
+    }
+    return endpoint;
+  }
+
+  return `${base}${endpoint}`;
+}
+
 async function loginUser(username, password) {
+  const loginUrl = getCloudApiUrl('/api/login');
   try {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
+    let res;
+    try {
+      res = await fetch(loginUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+    } catch (netErr) {
+      if (loginUrl !== '/api/login') {
+        res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+      } else {
+        throw netErr;
+      }
+    }
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) {
       setAuthSession({ user: data.user, token: data.token });
@@ -598,7 +637,17 @@ async function fetchStateOnce(force = false) {
       headers['If-None-Match'] = lastServerETag;
     }
 
-    const res = await fetch('/api/state', { headers, cache: 'no-store' });
+    const apiUrl = getCloudApiUrl('/api/state');
+    let res;
+    try {
+      res = await fetch(apiUrl, { headers, cache: 'no-store' });
+    } catch (netErr) {
+      if (apiUrl !== '/api/state') {
+        res = await fetch('/api/state', { headers, cache: 'no-store' });
+      } else {
+        throw netErr;
+      }
+    }
 
     if (res.status === 304) {
       // 304 Not Modified: 0 body bytes transferred! In-memory check passed in <1ms.
@@ -660,7 +709,6 @@ async function pushStateToCloud(actionType = null) {
     return;
   }
 
-  // Always push directly to Master Raspberry Pi server
   try {
     const payload = {
       ...state,
@@ -674,11 +722,26 @@ async function pushStateToCloud(actionType = null) {
       'X-Auth-Token': encodeURIComponent(session.token)
     };
 
-    const res = await fetch('/api/state', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload)
-    });
+    const apiUrl = getCloudApiUrl('/api/state');
+    let res;
+    try {
+      res = await fetch(apiUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+    } catch (netErr) {
+      if (apiUrl !== '/api/state') {
+        res = await fetch('/api/state', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+      } else {
+        throw netErr;
+      }
+    }
+
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (data && data.etag) {
@@ -1358,15 +1421,24 @@ function renderStats() {
   // Calculate Family Awards
   // 1. Most active washer
   const topWasher = memberList[0]?.count > 0 ? memberList[0] : null;
-  // 2. Most loved washer (reactions)
-  const reactionCounts = { mama: 0, papa: 0, serezha: 0, vasya: 0 };
-  state.history.forEach(h => {
-    if (h.reactions && reactionCounts[h.memberId] !== undefined) {
+  // 2. Most loved washer (reactions - dynamically computed from state.members)
+  const memberKeys = Object.keys(state.members || {});
+  const reactionCounts = {};
+  memberKeys.forEach(mId => {
+    reactionCounts[mId] = 0;
+  });
+
+  (state.history || []).forEach(h => {
+    if (h && h.memberId && h.reactions && reactionCounts[h.memberId] !== undefined) {
       reactionCounts[h.memberId] += (h.reactions.love || 0) + (h.reactions.clap || 0) + (h.reactions.star || 0);
     }
   });
-  let mostLovedMemberId = Object.keys(reactionCounts).reduce((a, b) => reactionCounts[a] > reactionCounts[b] ? a : b, 'mama');
-  const mostLoved = reactionCounts[mostLovedMemberId] > 0 ? state.members[mostLovedMemberId] : null;
+
+  const fallbackId = memberKeys[0] || 'mama';
+  let mostLovedMemberId = memberKeys.length > 0
+    ? memberKeys.reduce((a, b) => (reactionCounts[a] || 0) > (reactionCounts[b] || 0) ? a : b, fallbackId)
+    : fallbackId;
+  const mostLoved = (reactionCounts[mostLovedMemberId] > 0 && state.members[mostLovedMemberId]) ? state.members[mostLovedMemberId] : null;
 
   if (awardsContainer) {
     awardsContainer.innerHTML = `
@@ -1425,7 +1497,10 @@ function shareFamilyReport() {
   });
 
   text += `━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `📱 Домашний график: http://192.168.1.75:8080`;
+  const currentOrigin = (typeof window !== 'undefined' && window.location && window.location.origin)
+    ? window.location.origin
+    : 'http://127.0.0.1:8080';
+  text += `📱 Домашний график: ${currentOrigin}`;
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
@@ -2583,12 +2658,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Copy local IP
+  // Set current origin to local-ip-code element
+  const codeEl = document.getElementById('local-ip-code');
+  if (codeEl && typeof window !== 'undefined' && window.location && window.location.origin) {
+    codeEl.textContent = window.location.origin;
+  }
+
+  // Copy local IP / origin
   const btnCopyLocalIp = document.getElementById('btn-copy-local-ip');
   if (btnCopyLocalIp) {
     btnCopyLocalIp.addEventListener('click', () => {
-      const codeEl = document.getElementById('local-ip-code');
-      const code = codeEl ? codeEl.textContent : 'http://192.168.1.75:8080';
+      const currentOrigin = (typeof window !== 'undefined' && window.location && window.location.origin)
+        ? window.location.origin
+        : 'http://127.0.0.1:8080';
+      const currentCodeEl = document.getElementById('local-ip-code');
+      const code = (currentCodeEl && currentCodeEl.textContent && !currentCodeEl.textContent.includes('192.168.1.75')) ? currentCodeEl.textContent : currentOrigin;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(code).then(() => {
           soundFx.playPop();
