@@ -14,7 +14,7 @@
 [![Sync](https://img.shields.io/badge/Sync-Local%20Wi--Fi%20%7C%20Cloudflare%20%7C%20Firebase-10b981?style=flat-square)](https://cloudflare.com)
 [![Self-Hosted](https://img.shields.io/badge/Self--Hosted-Raspberry%20Pi%20%7C%20Docker-C51A4A?style=flat-square&logo=raspberrypi)](https://raspberrypi.com)
 
-[✨ Features](#-key-features) • [📸 Screenshots](#-interface--design) • [🧩 App Tour](#-how-it-works) • [🚀 Quick Start](#-self-hosting-at-home) • [☁️ Cloud & Tunnels](#-internet-synchronization) • [⚙️ Customization](#️-configuring-members--roles) • [🔌 REST API](#-rest-api-reference)
+[✨ Features](#-key-features) • [📸 Screenshots](#-interface--design) • [🧩 App Tour](#-how-it-works) • [🚀 Quick Start](#-self-hosting-at-home) • [☁️ Cloud & Tunnels](#-internet-synchronization) • [⚙️ Customization](#-configuring-members--roles) • [🔌 REST API](#-rest-api-reference)
 
 </div>
 
@@ -65,8 +65,8 @@ The primary mission-control screen:
 - **Duty Hero Card**: Personal profile hue, glowing active ring, avatar, and name of whoever is currently up.
 - **Dynamic Shift Timer**: Automatically tracks how long the current duty has been active (`⏱️ On duty for 2 h. 30 m.`).
 - **Experience Counter**: Total number of washes completed across all time.
-- **The Big "I WASHED THE DISHES!" Button**: Tactile glassmorphism button with haptic feedback. Tapping triggers fullscreen confetti, plays a victory chord, and passes the baton to the next person.
-- **Quick Turn Modifiers**:
+- **The Big "I WASHED THE DISHES!" Button**: The glowing centerpiece of the app. One tap bursts confetti across the screen, triggers a triumphant procedural synth chord, and smoothly hands over the baton to the next housemate.
+- **One-Tap Turn Modifiers**:
   - `🔄 Swap`: Hand over the current shift to someone else in one tap without disrupting the queue order.
   - `⏩ Skip`: Emergency pass (e.g., if a housemate is sick or traveling).
   - `📝 Add Note`: Attach context to a wash using pre-made chips (*"Pots & pans mountain 🍳"*, *"Squeaky clean ✨"*, *"After dinner party 🍰"*, *"Washed without reminders! 🌟"*).
@@ -76,9 +76,9 @@ The primary mission-control screen:
 ---
 
 ### 2. 📜 Tab 2: Timeline Journal
-A chronological log of all completed chores:
-- **Grouped by Calendar Day**: Washes are automatically structured into clean daily sections (*"Today"*, *"Yesterday"*, *"October 24"*, etc.).
-- **Rich Cards**: Completion timestamp, shift duration, avatar, and attached notes.
+A warm, transparent diary of kitchen heroism:
+- **Grouped by Calendar Day**: Washes are organized into neat daily clusters (*"Today"*, *"Yesterday"*, *"October 24"*, etc.).
+- **Shift Cards**: Exact completion time, shift duration, avatar, and attached notes.
 - **Family Reactions (❤️, 👏, 🌟)**: Peer praise that syncs across all screens. Send some love or applaud someone for tackling a tough greasy pan.
 - **Filter Chips**: Filter by a specific housemate in one click or view the full shared stream.
 - **CSV Export**: The **"📥 Export"** button generates `dish_duty_history.csv` with dates, names, shift durations, and notes for Excel or Google Sheets.
@@ -86,7 +86,7 @@ A chronological log of all completed chores:
 ---
 
 ### 3. 🏆 Tab 3: Honor Board & 3D Podium
-Friendly gamification and shared contribution:
+A playful leaderboard that celebrates everyone's effort:
 - **3D Glass Podium**: Three-dimensional frosted glass pedestals for the top 3 washers, complete with gold, silver, and bronze badges, floating avatars, and a winner's crown.
 - **Contribution Share Bar**: Segmented progress bar showing each person's percentage share of all washed dishes (totaling 100%).
 - **Detailed Leaderboard**: Roster ranked by wash counts and contribution share.
@@ -129,7 +129,7 @@ Accessible via the hamburger menu **☰** in the top right corner:
 
 The server backend is engineered for minimal resource usage. It runs entirely on the Python or Node.js standard library (no `pip install`, zero external packages), keeps state in RAM for instant reads, and protects MicroSD cards on Raspberry Pi by using atomic writes.
 
-### Architecture Highlights:
+### Engineered for Low-Power Homelabs:
 - **RAM State Cache**: `GET /api/state` requests are served straight from memory with zero disk I/O.
 - **ETag & 304 Not Modified**: If no dishes were washed since the last check, the server returns an empty `304` in **< 1 ms**, transferring **0 bytes** of body payload.
 - **On-the-Fly Gzip**: Compresses HTML, JS, CSS, and JSON automatically, saving bandwidth on mobile connections.
