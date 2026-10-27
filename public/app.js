@@ -379,35 +379,98 @@ class SoundEngine {
     osc.stop(now + 0.1);
   }
 
+  // Pure Crystal Glass Ping (Символ идеальной чистоты)
+  playCrystalChime() {
+    if (!settings.sound) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const freqs = [2349.3, 4698.6]; // D7 fundamental + sparkling octave overtone
+
+    freqs.forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      osc.type = idx === 0 ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(freq, now);
+
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(freq, now);
+      filter.Q.setValueAtTime(12, now);
+
+      const amp = idx === 0 ? 0.38 : 0.18;
+      gain.gain.setValueAtTime(amp, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + (idx === 0 ? 0.85 : 0.45));
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.9);
+    });
+  }
+
+  // Sub-bass tactile pop for buttons (80Hz -> 30Hz)
+  playSubClick() {
+    if (!settings.sound) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(95, now);
+    osc.frequency.exponentialRampToValueAtTime(35, now + 0.04);
+
+    gain.gain.setValueAtTime(0.24, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.05);
+  }
+
   playVictory() {
     if (!settings.sound) return;
     this.init();
     if (!this.ctx) return;
 
+    // Harmonic chord with subtle chorus detuning
     const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
     const now = this.ctx.currentTime;
 
     notes.forEach((freq, idx) => {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      const startTime = now + idx * 0.07;
+      [-4, 4].forEach(detuneCents => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const startTime = now + idx * 0.07;
 
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, startTime);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, startTime);
+        osc.detune.setValueAtTime(detuneCents, startTime);
 
-      gain.gain.setValueAtTime(0.28, startTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.35);
+        gain.gain.setValueAtTime(0.18, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.45);
 
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
 
-      osc.start(startTime);
-      osc.stop(startTime + 0.36);
+        osc.start(startTime);
+        osc.stop(startTime + 0.46);
+      });
     });
   }
 
   playClick() {
     if (!settings.sound) return;
+    this.playSubClick();
     this.init();
     if (!this.ctx) return;
 
@@ -417,7 +480,7 @@ class SoundEngine {
 
     osc.type = 'sine';
     osc.frequency.setValueAtTime(850, now);
-    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.setValueAtTime(0.08, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.04);
 
     osc.connect(gain);
@@ -456,12 +519,16 @@ class SoundEngine {
   playHaptic(style = 'light') {
     if (!('vibrate' in navigator)) return;
     try {
-      if (style === 'light') {
-        navigator.vibrate(12);
+      if (style === 'tap') {
+        navigator.vibrate(8);
+      } else if (style === 'light') {
+        navigator.vibrate(14);
       } else if (style === 'medium') {
-        navigator.vibrate(28);
-      } else if (style === 'success') {
-        navigator.vibrate([25, 40, 30]);
+        navigator.vibrate(26);
+      } else if (style === 'reaction') {
+        navigator.vibrate([10, 30, 15]);
+      } else if (style === 'success' || style === 'victory') {
+        navigator.vibrate([20, 50, 25, 40, 30]);
       } else if (style === 'error') {
         navigator.vibrate([40, 30, 40]);
       }
@@ -524,6 +591,22 @@ class CelebrationFX {
       });
     }
 
+    // 4-pointed golden sparkling stars
+    for (let i = 0; i < 24; i++) {
+      this.particles.push({
+        type: 'sparkle',
+        x: this.width / 2 + (Math.random() - 0.5) * 220,
+        y: this.height * 0.45 + (Math.random() - 0.5) * 180,
+        vx: (Math.random() - 0.5) * 5,
+        vy: (Math.random() - 0.5) * 5,
+        size: Math.random() * 8 + 4,
+        scale: 0,
+        maxScale: Math.random() * 1.2 + 0.8,
+        color: '#facc15',
+        opacity: 1
+      });
+    }
+
     if (!this.animating) {
       this.animating = true;
       this.animate();
@@ -578,6 +661,31 @@ class CelebrationFX {
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         this.ctx.fill();
         this.ctx.restore();
+      } else if (p.type === 'sparkle') {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.95;
+        p.vy *= 0.95;
+        p.scale += 0.08;
+        p.opacity -= 0.015;
+
+        const currentScale = Math.min(p.scale, p.maxScale);
+        const sz = p.size * currentScale;
+
+        this.ctx.save();
+        this.ctx.globalAlpha = Math.max(0, p.opacity);
+        this.ctx.translate(p.x, p.y);
+        this.ctx.fillStyle = p.color;
+        
+        // Draw 4-point star
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, -sz);
+        this.ctx.quadraticCurveTo(0, 0, sz, 0);
+        this.ctx.quadraticCurveTo(0, 0, 0, sz);
+        this.ctx.quadraticCurveTo(0, 0, -sz, 0);
+        this.ctx.quadraticCurveTo(0, 0, 0, -sz);
+        this.ctx.fill();
+        this.ctx.restore();
       }
 
       if (p.opacity <= 0 || p.y > this.height + 50) {
@@ -590,6 +698,205 @@ class CelebrationFX {
 }
 
 const celebration = new CelebrationFX('fx-canvas');
+window.celebration = celebration;
+
+// ========================================================
+// GESTURE CONTROLLER (VisionOS Mobile Micro-Interactions)
+// ========================================================
+class GestureController {
+  constructor() {
+    this.startX = 0;
+    this.startY = 0;
+    this.currentX = 0;
+    this.currentY = 0;
+    this.isDragging = false;
+    this.isPTR = false;
+    this.isRefreshing = false;
+    this.isSheetDrag = false;
+    this.activeSheet = null;
+    this.init();
+  }
+
+  init() {
+    const ptrIndicator = document.getElementById('ptr-indicator');
+    const ptrIcon = document.getElementById('ptr-icon');
+    const ptrText = document.getElementById('ptr-text');
+
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      this.startX = touch.clientX;
+      this.startY = touch.clientY;
+      this.currentX = touch.clientX;
+      this.currentY = touch.clientY;
+      this.isDragging = true;
+      this.isPTR = false;
+      this.isSheetDrag = false;
+      this.activeSheet = null;
+
+      // 1. Check if touch starts on an active Bottom Sheet Modal
+      const openModal = document.querySelector('.modal-backdrop:not(.hidden)');
+      if (openModal) {
+        const modalCard = openModal.querySelector('.modal-card');
+        if (modalCard) {
+          const isHeader = Boolean(e.target.closest('.sheet-grab-bar, .modal-head'));
+          const isAtTop = modalCard.scrollTop <= 2;
+          if (isHeader || isAtTop) {
+            this.isSheetDrag = true;
+            this.activeSheet = modalCard;
+          }
+        }
+        return;
+      }
+
+      // 2. Check if candidate for Pull-to-Refresh
+      const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      const inInteractive = Boolean(e.target.closest('input, textarea, select, button, #queue-track, .queue-card, .toast-notification'));
+      if (scrollY <= 2 && !inInteractive && !this.isRefreshing) {
+        this.isPTR = true;
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!this.isDragging || e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      this.currentX = touch.clientX;
+      this.currentY = touch.clientY;
+      const dx = this.currentX - this.startX;
+      const dy = this.currentY - this.startY;
+
+      // 1. Bottom Sheet dragging
+      if (this.isSheetDrag && this.activeSheet) {
+        if (dy > 0) {
+          this.activeSheet.style.transform = `translateY(${dy}px)`;
+          this.activeSheet.style.transition = 'none';
+        }
+        return;
+      }
+
+      // 2. Pull-to-Refresh dragging
+      if (this.isPTR && ptrIndicator && !this.isRefreshing) {
+        const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+        if (scrollY <= 2 && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
+          const pullDist = Math.min(dy * 0.42, 70);
+          if (pullDist > 8) {
+            ptrIndicator.style.height = `${pullDist}px`;
+            ptrIndicator.style.opacity = `${Math.min(pullDist / 36, 1)}`;
+            if (ptrIcon) ptrIcon.style.transform = `rotate(${pullDist * 4.5}deg)`;
+            if (ptrText) {
+              ptrText.textContent = pullDist >= 44 ? 'Отпустите для обновления...' : 'Потяните для обновления...';
+            }
+          }
+        } else if (dy < 0) {
+          this.isPTR = false;
+          ptrIndicator.style.height = '0px';
+          ptrIndicator.style.opacity = '0';
+        }
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchend', async () => {
+      if (!this.isDragging) return;
+      this.isDragging = false;
+      const dx = this.currentX - this.startX;
+      const dy = this.currentY - this.startY;
+
+      // 1. Bottom Sheet release
+      if (this.isSheetDrag && this.activeSheet) {
+        const sheet = this.activeSheet;
+        this.isSheetDrag = false;
+        this.activeSheet = null;
+
+        if (dy > 110) {
+          sheet.style.transition = 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
+          sheet.style.transform = 'translateY(100%)';
+          if (window.soundFx) soundFx.playHaptic('light');
+          setTimeout(() => {
+            closeAllModals();
+            sheet.style.transform = '';
+            sheet.style.transition = '';
+          }, 200);
+        } else {
+          sheet.style.transition = 'transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          sheet.style.transform = 'translateY(0)';
+          setTimeout(() => {
+            sheet.style.transform = '';
+            sheet.style.transition = '';
+          }, 280);
+        }
+        return;
+      }
+
+      // 2. Pull-to-Refresh release
+      if (this.isPTR && ptrIndicator && !this.isRefreshing) {
+        this.isPTR = false;
+        const pullDist = Math.min(dy * 0.42, 70);
+        if (pullDist >= 44) {
+          this.isRefreshing = true;
+          ptrIndicator.style.height = '50px';
+          ptrIndicator.style.opacity = '1';
+          if (ptrIcon) ptrIcon.classList.add('ptr-spin');
+          if (ptrText) ptrText.textContent = 'Обновление данных...';
+          if (window.soundFx) soundFx.playHaptic('tap');
+
+          try {
+            await fetchStateOnce(true);
+            if (ptrText) ptrText.textContent = 'Обновлено! ✨';
+            if (window.soundFx) soundFx.playCrystalChime();
+          } catch (err) {
+            if (ptrText) ptrText.textContent = 'Ошибка обновления';
+          }
+
+          setTimeout(() => {
+            ptrIndicator.style.height = '0px';
+            ptrIndicator.style.opacity = '0';
+            if (ptrIcon) {
+              ptrIcon.classList.remove('ptr-spin');
+              ptrIcon.style.transform = '';
+            }
+            this.isRefreshing = false;
+          }, 450);
+          return;
+        } else {
+          ptrIndicator.style.height = '0px';
+          ptrIndicator.style.opacity = '0';
+          if (ptrIcon) ptrIcon.style.transform = '';
+        }
+      }
+
+      // 3. Tab horizontal swipe
+      const hasOpenModal = Boolean(document.querySelector('.modal-backdrop:not(.hidden)'));
+      if (hasOpenModal) return;
+
+      const target = document.elementFromPoint(this.startX, this.startY);
+      if (target && target.closest('#queue-track, input, textarea, select, button, .queue-card, .toast-notification')) {
+        return;
+      }
+
+      if (Math.abs(dx) > 65 && Math.abs(dx) > Math.abs(dy) * 1.6) {
+        const tabs = ['tab-duty', 'tab-history', 'tab-stats'];
+        const currentTab = settings.activeTab || 'tab-duty';
+        const currentIndex = tabs.indexOf(currentTab);
+
+        if (dx < -65 && currentIndex < tabs.length - 1) {
+          switchTab(tabs[currentIndex + 1]);
+          if (window.soundFx) soundFx.playHaptic('tap');
+        } else if (dx > 65 && currentIndex > 0) {
+          switchTab(tabs[currentIndex - 1]);
+          if (window.soundFx) soundFx.playHaptic('tap');
+        }
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      updateTabIndicator();
+    });
+
+    window.addEventListener('orientationchange', () => {
+      setTimeout(updateTabIndicator, 100);
+    });
+  }
+}
 
 // ========================================================
 // SYNCHRONIZATION ENGINE (In-Memory ETag 304 + Ultra-Fast Adaptive Polling + Battery Saver)
@@ -880,11 +1187,12 @@ function handleWashDone(note = '', photo = null) {
   saveState(false, 'wash');
   renderAll();
 
-  // Celebratory FX & Audio
+  // Celebratory FX & Spatial Audio
   if (window.soundFx) {
+    soundFx.playCrystalChime();
     soundFx.playWash();
     soundFx.playVictory();
-    soundFx.playHaptic('success');
+    soundFx.playHaptic('victory');
   }
   if (window.celebration) celebration.burst(currentMember.color);
 
@@ -925,7 +1233,10 @@ function handleSkipTurn() {
 
   saveState(false, 'skip');
   renderAll();
-  soundFx.playPop();
+  if (window.soundFx) {
+    soundFx.playPop();
+    soundFx.playHaptic('medium');
+  }
   showUndoToast(`Очередь ${current.name} пропущена ⏩`, 4000);
 }
 
@@ -942,7 +1253,10 @@ function handleSwapTurn(targetMemberId) {
     state.dutyStartedAt = Date.now();
     saveState(false, 'swap');
     renderAll();
-    soundFx.playClick();
+    if (window.soundFx) {
+      soundFx.playClick();
+      soundFx.playHaptic('medium');
+    }
     closeAllModals();
   }
 }
@@ -954,7 +1268,10 @@ function handleReaction(historyId, reactionType) {
   if (!item.reactions) item.reactions = { love: 0, clap: 0, star: 0 };
   item.reactions[reactionType] = (item.reactions[reactionType] || 0) + 1;
 
-  if (window.soundFx) soundFx.playPop();
+  if (window.soundFx) {
+    soundFx.playPop();
+    soundFx.playHaptic('reaction');
+  }
   saveState(false, 'reaction');
   renderHistory();
 }
@@ -962,15 +1279,65 @@ function handleReaction(historyId, reactionType) {
 // ========================================================
 // RENDERING & TAB SWITCHING ENGINE
 // ========================================================
+// VisionOS Glass Sliding Tab Highlight
+function updateTabIndicator(activeBtn) {
+  const indicator = document.getElementById('tab-sliding-indicator');
+  const pill = document.getElementById('tab-bar-pill');
+  if (!indicator || !pill) return;
+  const targetBtn = activeBtn || pill.querySelector('.tab-item.active');
+  if (!targetBtn) return;
+
+  const pillRect = pill.getBoundingClientRect();
+  const btnRect = targetBtn.getBoundingClientRect();
+
+  if (pillRect.width === 0 || btnRect.width === 0) return;
+
+  const left = btnRect.left - pillRect.left;
+  const width = btnRect.width;
+
+  indicator.style.transform = `translateX(${left}px)`;
+  indicator.style.width = `${width}px`;
+  indicator.style.opacity = '1';
+}
+
+// Rolling Number Ticker with Micro-Punch
+function animateNumber(element, startVal, endVal, duration = 650, templateFn = (v) => v) {
+  if (!element) return;
+  if (isNaN(startVal) || isNaN(endVal) || startVal === endVal) {
+    element.textContent = templateFn(endVal);
+    return;
+  }
+  const startTime = performance.now();
+  element.classList.add('number-pop');
+
+  function update(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const currentVal = Math.round(startVal + (endVal - startVal) * ease);
+    element.textContent = templateFn(currentVal);
+
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    } else {
+      element.textContent = templateFn(endVal);
+      setTimeout(() => element.classList.remove('number-pop'), 200);
+    }
+  }
+  requestAnimationFrame(update);
+}
+
 function switchTab(targetTabId, shouldScroll = true) {
   if (!targetTabId || !document.getElementById(targetTabId)) {
     targetTabId = 'tab-duty';
   }
 
   // Update nav buttons in bottom dock
+  let activeTabBtn = null;
   document.querySelectorAll('.tab-item').forEach(b => {
     const isTarget = b.getAttribute('data-tab') === targetTabId;
     b.classList.toggle('active', isTarget);
+    if (isTarget) activeTabBtn = b;
   });
 
   // Update tab views
@@ -978,6 +1345,8 @@ function switchTab(targetTabId, shouldScroll = true) {
     const isTarget = view.id === targetTabId;
     view.classList.toggle('active', isTarget);
   });
+
+  updateTabIndicator(activeTabBtn);
 
   settings.activeTab = targetTabId;
   saveSettings();
@@ -1045,9 +1414,15 @@ function renderDutyTab() {
     heroTimer.textContent = timerText;
   }
   const totalMemberWashes = state.stats[current.id] || 0;
-  const streakText = `🧼 Помыто: ${totalMemberWashes}`;
-  if (heroStreak && heroStreak.textContent !== streakText) {
-    heroStreak.textContent = streakText;
+  if (heroStreak) {
+    const prevStreak = parseInt(heroStreak.getAttribute('data-val'), 10);
+    if (isNaN(prevStreak)) {
+      heroStreak.setAttribute('data-val', totalMemberWashes);
+      heroStreak.textContent = `🧼 Помыто: ${totalMemberWashes}`;
+    } else if (prevStreak !== totalMemberWashes) {
+      heroStreak.setAttribute('data-val', totalMemberWashes);
+      animateNumber(heroStreak, prevStreak, totalMemberWashes, 600, v => `🧼 Помыто: ${v}`);
+    }
   }
 
   // Queue track
@@ -1347,7 +1722,14 @@ function renderStats() {
 
   const totalWashes = memberList.reduce((sum, m) => sum + m.count, 0);
   if (totalBadge) {
-    totalBadge.textContent = `Всего: ${totalWashes} ${pluralize(totalWashes, 'мойка', 'мойки', 'моек')}`;
+    const prevBadgeVal = parseInt(totalBadge.getAttribute('data-val'), 10);
+    if (isNaN(prevBadgeVal)) {
+      totalBadge.setAttribute('data-val', totalWashes);
+      totalBadge.textContent = `Всего: ${totalWashes} ${pluralize(totalWashes, 'мойка', 'мойки', 'моек')}`;
+    } else if (prevBadgeVal !== totalWashes) {
+      totalBadge.setAttribute('data-val', totalWashes);
+      animateNumber(totalBadge, prevBadgeVal, totalWashes, 700, v => `Всего: ${v} ${pluralize(v, 'мойка', 'мойки', 'моек')}`);
+    }
   }
 
   // 1. Render 3D Podium for Top 3
@@ -2846,6 +3228,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initial render
   renderAll();
+
+  // Initialize Gesture Controller (PTR, Bottom-sheet dismiss, Tab swipe)
+  window.gestureController = new GestureController();
+
+  // Position VisionOS sliding tab highlight
+  requestAnimationFrame(() => updateTabIndicator());
+  setTimeout(() => updateTabIndicator(), 150);
 
   const reqTab = urlParams.get('tab');
   if (reqTab === 'history') switchTab('tab-history');

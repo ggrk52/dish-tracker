@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=6.0">
+  <link rel="stylesheet" href="style.css?v=7.0">
 </head>
 <body>
   <!-- Canvas for celebration confetti & bubbles -->
@@ -88,8 +88,16 @@
       <button id="btn-undo" class="toast-undo-btn">Отменить</button>
     </div>
 
+    <!-- Pull to Refresh Indicator -->
+    <div id="ptr-indicator" class="ptr-indicator">
+      <div class="ptr-content">
+        <span class="ptr-icon" id="ptr-icon">🍽️</span>
+        <span class="ptr-text" id="ptr-text">Потяните для обновления...</span>
+      </div>
+    </div>
+
     <!-- MAIN APP CONTENT (Tab Views) -->
-    <main class="main-content">
+    <main class="main-content" id="main-content">
       
       <!-- ========================================== -->
       <!-- TAB 1: DUTY / ДЕЖУРСТВО                    -->
@@ -269,7 +277,8 @@
 
     <!-- Bottom Navigation Bar (Floating Island Dock Style) -->
     <nav class="bottom-tab-bar">
-      <div class="tab-bar-pill">
+      <div class="tab-bar-pill" id="tab-bar-pill">
+        <div class="tab-sliding-indicator" id="tab-sliding-indicator"></div>
         <button class="tab-item active" data-tab="tab-duty" type="button">
           <span class="tab-icon">🧼</span>
           <span class="tab-label">Дежурство</span>
@@ -598,6 +607,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=6.0"></script>
+  <script src="app.js?v=7.0"></script>
 </body>
 </html>
