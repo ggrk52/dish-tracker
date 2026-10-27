@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=7.0">
+  <link rel="stylesheet" href="style.css?v=7.1">
 </head>
 <body>
   <!-- Canvas for celebration confetti & bubbles -->
@@ -407,6 +407,44 @@
   </div>
 
   <!-- ========================================== -->
+  <!-- MODAL: CONFIRM SKIP TURN                   -->
+  <!-- ========================================== -->
+  <div id="modal-confirm-skip" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="sheet-grab-bar"></div>
+      <div class="modal-head">
+        <h3>⏩ Пропустить дежурство?</h3>
+        <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
+      </div>
+
+      <div class="confirm-skip-box">
+        <div class="confirm-skip-avatar-row">
+          <div class="confirm-skip-member" id="confirm-skip-current">
+            <span class="confirm-skip-avatar" id="confirm-skip-avatar">👩</span>
+            <span class="confirm-skip-name" id="confirm-skip-name">Мама</span>
+          </div>
+          <span class="confirm-skip-arrow">➔</span>
+          <div class="confirm-skip-member" id="confirm-skip-next">
+            <span class="confirm-skip-avatar" id="confirm-skip-next-avatar">👦</span>
+            <span class="confirm-skip-name" id="confirm-skip-next-name">Серёжа</span>
+          </div>
+        </div>
+
+        <p class="modal-sub confirm-skip-desc" id="confirm-skip-desc">
+          Очередь будет передана следующему по списку без зачисления помывки.
+        </p>
+      </div>
+
+      <div class="modal-actions-grid">
+        <button type="button" class="secondary-action-btn" onclick="closeAllModals()">Отмена</button>
+        <button type="button" id="btn-confirm-skip-submit" class="btn-skip-confirm-danger">
+          <span>⏩ Да, пропустить</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
   <!-- MODAL: NOTE / WASH WITH COMMENT            -->
   <!-- ========================================== -->
   <div id="modal-note" class="modal-backdrop hidden">
@@ -607,6 +645,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=7.0"></script>
+  <script src="app.js?v=7.1"></script>
 </body>
 </html>

@@ -2558,6 +2558,47 @@ function openSwapModal() {
   openModal('modal-swap');
 }
 
+function openConfirmSkipModal() {
+  const current = getCurrentDutyMember();
+  if (!current) return;
+
+  const nextIdx = (state.currentQueueIndex + 1) % state.queue.length;
+  const nextMemberId = state.queue[nextIdx];
+  const nextMember = state.members[nextMemberId];
+
+  const avatarEl = document.getElementById('confirm-skip-avatar');
+  const nameEl = document.getElementById('confirm-skip-name');
+  const nextAvatarEl = document.getElementById('confirm-skip-next-avatar');
+  const nextNameEl = document.getElementById('confirm-skip-next-name');
+  const descEl = document.getElementById('confirm-skip-desc');
+
+  if (avatarEl) {
+    avatarEl.textContent = current.avatar;
+    avatarEl.style.borderColor = current.color;
+  }
+  if (nameEl) {
+    nameEl.textContent = current.name;
+    nameEl.style.color = current.color;
+  }
+
+  if (nextMember) {
+    if (nextAvatarEl) {
+      nextAvatarEl.textContent = nextMember.avatar;
+      nextAvatarEl.style.borderColor = nextMember.color;
+    }
+    if (nextNameEl) {
+      nextNameEl.textContent = nextMember.name;
+      nextNameEl.style.color = nextMember.color;
+    }
+    if (descEl) {
+      descEl.textContent = `Очередь ${current.name} будет пропущена, и дежурным сразу станет ${nextMember.name} (без записи помывки в статистику).`;
+    }
+  }
+
+  openModal('modal-confirm-skip');
+  if (window.soundFx) soundFx.playClick();
+}
+
 function openReorderModal() {
   const container = document.getElementById('reorder-rows-container');
   const tempQueue = [...state.queue];
@@ -2897,7 +2938,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSkipDuty = document.getElementById('btn-skip-duty');
   if (btnSkipDuty) {
     btnSkipDuty.addEventListener('click', () => {
-      requireAdmin(() => handleSkipTurn());
+      requireAdmin(() => openConfirmSkipModal());
+    });
+  }
+
+  const btnConfirmSkipSubmit = document.getElementById('btn-confirm-skip-submit');
+  if (btnConfirmSkipSubmit) {
+    btnConfirmSkipSubmit.addEventListener('click', () => {
+      closeAllModals();
+      handleSkipTurn();
     });
   }
 
