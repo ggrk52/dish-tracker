@@ -142,14 +142,20 @@
 
           <!-- Quick Turn Modifiers -->
           <div class="hero-quick-row">
-            <button id="btn-swap-duty" class="quick-btn" type="button">
-              <span>🔄</span> Поменяться
+            <button id="btn-swap-duty" class="quick-btn" type="button" title="Поменяться дежурством">
+              <span>🔄</span>
+              <span class="btn-text-full">Поменяться</span>
+              <span class="btn-text-short">Обмен</span>
             </button>
-            <button id="btn-skip-duty" class="quick-btn" type="button">
-              <span>⏩</span> Пропустить
+            <button id="btn-skip-duty" class="quick-btn" type="button" title="Пропустить дежурство">
+              <span>⏩</span>
+              <span class="btn-text-full">Пропустить</span>
+              <span class="btn-text-short">Пасс</span>
             </button>
-            <button id="btn-add-note" class="quick-btn" type="button">
-              <span>📝</span> С заметкой
+            <button id="btn-add-note" class="quick-btn" type="button" title="Отметить с заметкой или фото">
+              <span>📝</span>
+              <span class="btn-text-full">С заметкой</span>
+              <span class="btn-text-short">Заметка</span>
             </button>
           </div>
         </div>
@@ -285,9 +291,28 @@
   <!-- ========================================== -->
   <div id="modal-settings" class="modal-backdrop hidden">
     <div class="modal-card">
+      <div class="sheet-grab-bar"></div>
       <div class="modal-head">
         <h3>⚙️ Настройки и Сервер</h3>
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
+      </div>
+
+      <!-- Quick Toggles for Mobile (Theme & Sound) -->
+      <div class="settings-quick-toggles-row">
+        <button id="btn-quick-theme" class="quick-toggle-card" type="button" aria-label="Сменить тему">
+          <span class="quick-toggle-icon" id="quick-theme-icon">🌙</span>
+          <div class="quick-toggle-text">
+            <span class="quick-toggle-label">Оформление</span>
+            <span class="quick-toggle-val" id="quick-theme-val">Тёмная</span>
+          </div>
+        </button>
+        <button id="btn-quick-sound" class="quick-toggle-card" type="button" aria-label="Переключить звук">
+          <span class="quick-toggle-icon" id="quick-sound-icon">🔊</span>
+          <div class="quick-toggle-text">
+            <span class="quick-toggle-label">Звуки</span>
+            <span class="quick-toggle-val" id="quick-sound-val">Включены</span>
+          </div>
+        </button>
       </div>
 
       <!-- Access Rights (Admin PIN) -->
@@ -360,6 +385,7 @@
   <!-- ========================================== -->
   <div id="modal-swap" class="modal-backdrop hidden">
     <div class="modal-card">
+      <div class="sheet-grab-bar"></div>
       <div class="modal-head">
         <h3>🔄 Поменяться дежурством</h3>
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
@@ -376,6 +402,7 @@
   <!-- ========================================== -->
   <div id="modal-note" class="modal-backdrop hidden">
     <div class="modal-card">
+      <div class="sheet-grab-bar"></div>
       <div class="modal-head">
         <h3>📝 Отметить помывку с заметкой</h3>
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
@@ -417,6 +444,7 @@
   <!-- ========================================== -->
   <div id="modal-reorder" class="modal-backdrop hidden">
     <div class="modal-card">
+      <div class="sheet-grab-bar"></div>
       <div class="modal-head">
         <h3>📋 Порядок очереди</h3>
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
@@ -434,6 +462,7 @@
   <!-- ========================================== -->
   <div id="modal-cloud-guide" class="modal-backdrop hidden">
     <div class="modal-card guide-card">
+      <div class="sheet-grab-bar"></div>
       <div class="modal-head">
         <h3>🚀 Как выложить в интернет (2 простых шага)</h3>
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
@@ -468,6 +497,7 @@
   <!-- ========================================== -->
   <div id="modal-login" class="modal-backdrop hidden">
     <div class="modal-card login-card">
+      <div class="sheet-grab-bar"></div>
       <div class="modal-head">
         <h3>🔐 Вход в Чистую Тарелку</h3>
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
@@ -521,6 +551,7 @@
   <!-- ========================================== -->
   <div id="modal-account" class="modal-backdrop hidden">
     <div class="modal-card">
+      <div class="sheet-grab-bar"></div>
       <div class="modal-head">
         <h3>👤 Мой аккаунт</h3>
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
@@ -546,6 +577,7 @@
   <!-- ========================================== -->
   <div id="modal-photo-viewer" class="modal-backdrop hidden photo-lightbox-backdrop">
     <div class="modal-card photo-lightbox-card">
+      <div class="sheet-grab-bar"></div>
       <div class="modal-head">
         <div class="photo-lightbox-author">
           <span class="photo-lightbox-icon">📸</span>

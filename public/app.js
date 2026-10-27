@@ -172,7 +172,7 @@ function logoutUser() {
   closeAllModals();
   if (window.soundFx) soundFx.playClick();
   showToast('Вы вышли из аккаунта', '🔒');
-  openLoginModal('serezha');
+  openLoginModal('admin');
 }
 
 function requireAdmin(actionCallback) {
@@ -180,7 +180,7 @@ function requireAdmin(actionCallback) {
     actionCallback();
     return;
   }
-  showToast('Изменение очереди доступно только Серёже (Администратор) 🔒', '👑');
+  showToast('Изменение очереди доступно только Администратору 🔒', '👑');
   if (window.soundFx) soundFx.playPop();
 }
 
@@ -250,7 +250,7 @@ function openLoginModal(preselectUser = 'admin') {
 function openAccountModal() {
   const user = getCurrentUser();
   if (!user) {
-    openLoginModal('serezha');
+    openLoginModal('admin');
     return;
   }
 
@@ -783,7 +783,7 @@ async function pushStateToCloud(actionType = null) {
     } else if (res.status === 401) {
       console.warn('Authentication token expired or rejected by server.');
       setAuthSession(null);
-      openLoginModal('serezha');
+      openLoginModal('admin');
     } else if (res.status === 403) {
       const errData = await res.json().catch(() => ({}));
       showToast(errData.error || 'Действие отклонено сервером', '🔒');
@@ -1790,7 +1790,7 @@ function renderAuthStatus() {
       settingsBadge.textContent = '🔒 Не авторизован';
       settingsDesc.textContent = 'Войдите в аккаунт, чтобы отмечать помытую посуду.';
       settingsActions.innerHTML = `
-        <button type="button" class="primary-action-btn" onclick="closeAllModals(); openLoginModal('serezha');">
+        <button type="button" class="primary-action-btn" onclick="closeAllModals(); openLoginModal('admin');">
           Войти в аккаунт 🔓
         </button>
       `;
@@ -2266,36 +2266,67 @@ async function toggleWakeLock() {
 // DOM INITIALIZATION
 // ========================================================
 document.addEventListener('DOMContentLoaded', () => {
-  // Theme init
-  const currentTheme = settings.theme || 'dark';
-  document.documentElement.setAttribute('data-theme', currentTheme);
-  const themeBtnIcon = document.getElementById('btn-theme')?.querySelector('.btn-icon');
-  if (themeBtnIcon) {
-    themeBtnIcon.textContent = (currentTheme === 'dark') ? '☀️' : '🌙';
+  // Theme & Sound UI synchronization
+  function syncThemeUI(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    const themeBtnIcon = document.getElementById('btn-theme')?.querySelector('.btn-icon');
+    if (themeBtnIcon) {
+      themeBtnIcon.textContent = (theme === 'dark') ? '☀️' : '🌙';
+    }
+    const quickThemeIcon = document.getElementById('quick-theme-icon');
+    const quickThemeVal = document.getElementById('quick-theme-val');
+    if (quickThemeIcon) {
+      quickThemeIcon.textContent = (theme === 'dark') ? '🌙' : '☀️';
+    }
+    if (quickThemeVal) {
+      quickThemeVal.textContent = (theme === 'dark') ? 'Тёмная' : 'Светлая';
+    }
   }
 
-  // Theme switch button
-  document.getElementById('btn-theme').addEventListener('click', () => {
-    soundFx.playClick();
+  function syncSoundUI(soundEnabled) {
+    const btnSound = document.getElementById('btn-sound');
+    if (btnSound) {
+      const icon = btnSound.querySelector('.btn-icon');
+      if (icon) icon.textContent = soundEnabled ? '🔊' : '🔇';
+    }
+    const quickSoundIcon = document.getElementById('quick-sound-icon');
+    const quickSoundVal = document.getElementById('quick-sound-val');
+    if (quickSoundIcon) {
+      quickSoundIcon.textContent = soundEnabled ? '🔊' : '🔇';
+    }
+    if (quickSoundVal) {
+      quickSoundVal.textContent = soundEnabled ? 'Включены' : 'Выключены';
+    }
+  }
+
+  function handleThemeToggle() {
+    if (window.soundFx) soundFx.playClick();
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const newTheme = isDark ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', newTheme);
     settings.theme = newTheme;
-    if (themeBtnIcon) {
-      themeBtnIcon.textContent = (newTheme === 'dark') ? '☀️' : '🌙';
-    }
+    syncThemeUI(newTheme);
     saveSettings();
-  });
+  }
 
-  // Sound toggle button
-  const btnSound = document.getElementById('btn-sound');
-  btnSound.querySelector('.btn-icon').textContent = settings.sound ? '🔊' : '🔇';
-  btnSound.addEventListener('click', () => {
+  function handleSoundToggle() {
     settings.sound = !settings.sound;
-    btnSound.querySelector('.btn-icon').textContent = settings.sound ? '🔊' : '🔇';
+    syncSoundUI(settings.sound);
     saveSettings();
-    if (settings.sound) soundFx.playPop();
-  });
+    if (settings.sound && window.soundFx) soundFx.playPop();
+  }
+
+  // Initialize Theme & Sound
+  const currentTheme = settings.theme || 'dark';
+  syncThemeUI(currentTheme);
+  syncSoundUI(!!settings.sound);
+
+  // Theme switch buttons (Header + Settings Modal)
+  document.getElementById('btn-theme')?.addEventListener('click', handleThemeToggle);
+  document.getElementById('btn-quick-theme')?.addEventListener('click', handleThemeToggle);
+
+  // Sound toggle buttons (Header + Settings Modal)
+  document.getElementById('btn-sound')?.addEventListener('click', handleSoundToggle);
+  document.getElementById('btn-quick-sound')?.addEventListener('click', handleSoundToggle);
 
   // Wake lock
   const btnWake = document.getElementById('btn-wake');
@@ -2337,7 +2368,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isLoggedIn()) {
         openAccountModal();
       } else {
-        openLoginModal('serezha');
+        openLoginModal('admin');
       }
       if (window.soundFx) soundFx.playClick();
     });
@@ -2351,7 +2382,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isLoggedIn()) {
         openAccountModal();
       } else {
-        openLoginModal('serezha');
+        openLoginModal('admin');
       }
       if (window.soundFx) soundFx.playClick();
     });
@@ -2459,7 +2490,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const isAdm = isAdmin();
 
       if (!user) {
-        openLoginModal('serezha');
+        openLoginModal('admin');
         return;
       }
 
@@ -2511,7 +2542,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const isAdm = isAdmin();
 
       if (!user) {
-        openLoginModal('serezha');
+        openLoginModal('admin');
         return;
       }
 
