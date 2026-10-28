@@ -4,7 +4,18 @@
 # Чистая Тарелка PRO
 # ========================================================
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+  SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
+  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+  [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
+
+if [ ! -f "$DIR/server.js" ] && [ -d "/home/ggrk52/dish-tracker" ]; then
+  DIR="/home/ggrk52/dish-tracker"
+fi
+
 FLAG_FILE="$DIR/maintenance.flag"
 
 case "$1" in
