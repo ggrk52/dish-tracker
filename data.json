@@ -34,10 +34,10 @@
     }
   },
   "queue": [
-    "mama",
-    "papa",
     "serezha",
-    "vasya"
+    "papa",
+    "vasya",
+    "mama"
   ],
   "currentQueueIndex": 0,
   "dutyStartedAt": 0,
@@ -47,5 +47,7 @@
     "serezha": 0,
     "vasya": 0
   },
-  "history": []
+  "history": [],
+  "debts": [],
+  "pendingTakeover": null
 }
