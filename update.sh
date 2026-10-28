@@ -23,6 +23,7 @@ fi
 
 # 2. Получение свежих обновлений из GitHub
 echo "📥 Получение обновлений из GitHub (ветка main)..."
+git config --global --add safe.directory "$DIR" 2>/dev/null || true
 git fetch origin main
 git reset --hard origin/main
 
@@ -31,6 +32,11 @@ if [ -f "/tmp/dish_tracker_data_preserve.json" ]; then
   cp "/tmp/dish_tracker_data_preserve.json" "data.json"
   rm -f "/tmp/dish_tracker_data_preserve.json"
   echo "✅ База данных семьи data.json надёжно сохранена."
+fi
+
+# Сохранение правильного владельца файлов
+if id "ggrk52" >/dev/null 2>&1; then
+  chown -R ggrk52:ggrk52 "$DIR" 2>/dev/null || true
 fi
 
 # 4. Перезапуск службы systemd
