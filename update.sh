@@ -24,6 +24,13 @@ fi
 # 2. Получение свежих обновлений из GitHub
 echo "📥 Получение обновлений из GitHub (ветка main)..."
 git config --global --add safe.directory "$DIR" 2>/dev/null || true
+
+if [ ! -d ".git" ]; then
+  echo "⚙️  Инициализация Git репозитория..."
+  git init -b main
+  git remote add origin https://github.com/ggrk52/dish-tracker.git || git remote set-url origin https://github.com/ggrk52/dish-tracker.git
+fi
+
 git fetch origin main
 git reset --hard origin/main
 
