@@ -642,6 +642,107 @@ body::before {
   animation: pulseNode 2s infinite;
 }
 
+/* Hero Debt Workoff & Pending Badges */
+.hero-debt-badge {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+  letter-spacing: 0.02em;
+  transition: all 0.25s ease;
+}
+
+.hero-debt-badge.workoff {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(234, 88, 12, 0.22));
+  border: 1px solid rgba(245, 158, 11, 0.65);
+  color: #fef08a;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.35);
+  animation: debtGlowPulse 2.4s infinite ease-in-out;
+}
+
+.hero-debt-badge.pending {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+
+.hero-debt-badge.owed {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  color: #6ee7b7;
+}
+
+@keyframes debtGlowPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 16px rgba(245, 158, 11, 0.35); }
+  50% { transform: scale(1.03); box-shadow: 0 0 24px rgba(245, 158, 11, 0.6); }
+}
+
+.debt-warning-tag {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-block;
+  margin: 4px 0;
+}
+
+/* Leaderboard Debt Chips */
+.badge-debt {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge-owed {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.stat-fair-score {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--amber);
+  font-size: 0.95rem;
+}
+
+.queue-debt-pill {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: var(--amber);
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 9999px;
+  padding: 2px 6px;
+  margin-top: 4px;
+  display: inline-block;
+}
+
 @keyframes pulseNode {
   0% { transform: scale(0.9); opacity: 0.7; }
   50% { transform: scale(1.2); opacity: 1; }

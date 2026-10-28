@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=7.2">
+  <link rel="stylesheet" href="style.css?v=7.3">
 </head>
 <body>
   <!-- Canvas for celebration confetti & bubbles -->
@@ -124,6 +124,9 @@
             <span id="hero-badge-title">СЕЙЧАС ДЕЖУРНЫЙ</span>
           </div>
 
+          <!-- Debt Status Badge -->
+          <div id="hero-debt-badge" class="hero-debt-badge hidden"></div>
+
           <div class="duty-avatar-box">
             <div class="avatar-aura-outer"></div>
             <div class="avatar-aura" id="hero-aura"></div>
@@ -143,8 +146,8 @@
             <div class="wash-btn-shine"></div>
             <span class="wash-icon">🧼</span>
             <div class="wash-label-box">
-              <span class="wash-title">Я ПОМЫЛ ПОСУДУ!</span>
-              <span class="wash-sub">Передать очередь дальше ✨</span>
+              <span class="wash-title" id="wash-btn-title">Я ПОМЫЛ ПОСУДУ!</span>
+              <span class="wash-sub" id="wash-btn-sub">Передать очередь дальше ✨</span>
             </div>
           </button>
 
@@ -430,8 +433,12 @@
           </div>
         </div>
 
+        <div class="debt-warning-tag" id="confirm-skip-debt-warning">
+          ⚠️ Вам будет начислен личный долг: 1 мойка
+        </div>
+
         <p class="modal-sub confirm-skip-desc" id="confirm-skip-desc">
-          Очередь будет передана следующему по списку без зачисления помывки.
+          Очередь перейдёт к следующему дежурному. Вы будете обязаны вернуть мойку, когда подойдёт его очередь!
         </p>
       </div>
 
@@ -645,6 +652,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=7.2"></script>
+  <script src="app.js?v=7.3"></script>
 </body>
 </html>

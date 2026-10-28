@@ -102,7 +102,9 @@ const DEFAULT_STATE = {
   currentQueueIndex: 0,
   dutyStartedAt: Date.now(),
   stats: { mama: 0, papa: 0, serezha: 0, vasya: 0 },
-  history: []
+  history: [],
+  debts: [],
+  pendingTakeover: null
 };
 
 // In-Memory State Cache
@@ -121,6 +123,8 @@ function getOrCreateState() {
       const data = JSON.parse(raw);
       if (data && data.queue && data.members) {
         memoryState = data;
+        if (!Array.isArray(memoryState.debts)) memoryState.debts = [];
+        if (memoryState.pendingTakeover === undefined) memoryState.pendingTakeover = null;
         stateJsonStr = JSON.stringify(memoryState);
         stateJsonBuffer = Buffer.from(stateJsonStr);
         return memoryState;
@@ -141,6 +145,8 @@ function saveStateToDisk(data) {
   const base = JSON.parse(JSON.stringify(DEFAULT_STATE));
   memoryState = { ...base, ...data };
   if (!data.members) memoryState.members = base.members;
+  if (!Array.isArray(data.debts)) memoryState.debts = [];
+  if (data.pendingTakeover === undefined) memoryState.pendingTakeover = null;
   stateVersion = Date.now();
   stateEtag = `"${stateVersion}"`;
   stateJsonStr = JSON.stringify(memoryState);
@@ -426,6 +432,32 @@ const server = http.createServer((req, res) => {
           currState.history.unshift(historyEntry);
           if (currState.history.length > 200) currState.history.pop();
 
+          // Settle debt if applicable
+          if (Array.isArray(parsedState.debts)) {
+            currState.debts = parsedState.debts;
+          } else {
+            const scheduledMember = currQ[currIdx];
+            if (Array.isArray(currState.debts)) {
+              const debtIdx = currState.debts.findIndex(d => d.toMemberId === scheduledMember);
+              if (debtIdx !== -1) {
+                currState.debts.splice(debtIdx, 1);
+              }
+            }
+          }
+
+          if (parsedState.pendingTakeover !== undefined) {
+            currState.pendingTakeover = parsedState.pendingTakeover;
+          } else if (currState.pendingTakeover && currState.pendingTakeover.coveredBy === washer) {
+            if (!Array.isArray(currState.debts)) currState.debts = [];
+            currState.debts.push({
+              id: Date.now(),
+              fromMemberId: currState.pendingTakeover.skippedBy,
+              toMemberId: washer,
+              createdAt: Date.now()
+            });
+            currState.pendingTakeover = null;
+          }
+
           if (currQ.length > 0) {
             currState.currentQueueIndex = (currIdx + 1) % currQ.length;
           }
@@ -458,6 +490,12 @@ const server = http.createServer((req, res) => {
           } else {
             currState.dutyStartedAt = Date.now();
           }
+          if (Array.isArray(parsedState.debts)) {
+            currState.debts = parsedState.debts;
+          }
+          if (parsedState.pendingTakeover !== undefined) {
+            currState.pendingTakeover = parsedState.pendingTakeover;
+          }
           saveStateToDisk(currState);
         } else if (['skip', 'swap'].includes(action)) {
           const isDuty = (currDutyId && authUser === currDutyId);
@@ -469,7 +507,24 @@ const server = http.createServer((req, res) => {
 
           if (action === 'skip') {
             if (currQ.length > 0) {
-              currState.currentQueueIndex = (currIdx + 1) % currQ.length;
+              const skippedMember = currDutyId;
+              const nextIdx = (currIdx + 1) % currQ.length;
+              const nextMember = currQ[nextIdx];
+
+              if (parsedState.pendingTakeover !== undefined) {
+                currState.pendingTakeover = parsedState.pendingTakeover;
+              } else {
+                currState.pendingTakeover = {
+                  skippedBy: skippedMember,
+                  coveredBy: nextMember,
+                  timestamp: Date.now()
+                };
+              }
+
+              currState.currentQueueIndex = nextIdx;
+            }
+            if (Array.isArray(parsedState.debts)) {
+              currState.debts = parsedState.debts;
             }
             currState.dutyStartedAt = Date.now();
             saveStateToDisk(currState);

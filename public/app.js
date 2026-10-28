@@ -24,7 +24,9 @@ const DEFAULT_STATE = {
     serezha: 0,
     vasya: 0
   },
-  history: []
+  history: [],
+  debts: [],
+  pendingTakeover: null
 };
 
 // Default settings
@@ -291,7 +293,12 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return JSON.parse(JSON.stringify(DEFAULT_STATE));
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_STATE, ...parsed };
+    return {
+      ...DEFAULT_STATE,
+      ...parsed,
+      debts: Array.isArray(parsed.debts) ? parsed.debts : [],
+      pendingTakeover: parsed.pendingTakeover || null
+    };
   } catch (e) {
     console.error('Failed to load state:', e);
     return JSON.parse(JSON.stringify(DEFAULT_STATE));
@@ -919,15 +926,22 @@ function updateConnectionUI(online) {
 function applyServerState(serverState) {
   if (!serverState || !serverState.queue || !Array.isArray(serverState.queue)) return;
 
-  const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}`;
-  const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}`;
+  const sTakeover = serverState.pendingTakeover ? `${serverState.pendingTakeover.skippedBy}->${serverState.pendingTakeover.coveredBy}` : 'none';
+  const lTakeover = state.pendingTakeover ? `${state.pendingTakeover.skippedBy}->${state.pendingTakeover.coveredBy}` : 'none';
+  const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}-${(serverState.debts || []).length}-${sTakeover}`;
+  const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}-${(state.debts || []).length}-${lTakeover}`;
 
   const wasInitial = !isInitialSyncDone;
   isInitialSyncDone = true;
 
   if (sHash !== lHash || wasInitial) {
     const prevWasher = getCurrentDutyMember() ? getCurrentDutyMember().name : null;
-    state = { ...DEFAULT_STATE, ...serverState };
+    state = {
+      ...DEFAULT_STATE,
+      ...serverState,
+      debts: Array.isArray(serverState.debts) ? serverState.debts : [],
+      pendingTakeover: serverState.pendingTakeover || null
+    };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     renderAll();
 
@@ -1137,13 +1151,63 @@ window.addEventListener('focus', handleThrottledResume);
 // ========================================================
 // CORE TURN & WASH LOGIC
 // ========================================================
+function getActiveDebts() {
+  if (!state.debts || !Array.isArray(state.debts)) return [];
+  return state.debts;
+}
+
+function getActiveDebtForMember(scheduledMemberId) {
+  const debts = getActiveDebts();
+  return debts.find(d => d.toMemberId === scheduledMemberId);
+}
+
+function getCurrentDutyInfo() {
+  const scheduledMemberId = state.queue[state.currentQueueIndex];
+  const scheduledMember = (state.members && state.members[scheduledMemberId]) || (DEFAULT_STATE.members[scheduledMemberId] || DEFAULT_STATE.members.mama);
+
+  // Check if current person is covering an immediate skip
+  if (state.pendingTakeover && state.pendingTakeover.coveredBy === scheduledMemberId) {
+    const skippedMember = (state.members && state.members[state.pendingTakeover.skippedBy]) || DEFAULT_STATE.members.mama;
+    return {
+      member: scheduledMember,
+      scheduledMember: scheduledMember,
+      isDebtWorkoff: false,
+      debt: null,
+      isCovering: true,
+      coveringFor: skippedMember
+    };
+  }
+
+  // Check if someone owes a debt to scheduledMember
+  const debt = getActiveDebtForMember(scheduledMemberId);
+  if (debt && state.members && state.members[debt.fromMemberId]) {
+    return {
+      member: state.members[debt.fromMemberId],
+      scheduledMember: scheduledMember,
+      isDebtWorkoff: true,
+      debt: debt,
+      isCovering: false,
+      coveringFor: null
+    };
+  }
+
+  return {
+    member: scheduledMember,
+    scheduledMember: scheduledMember,
+    isDebtWorkoff: false,
+    debt: null,
+    isCovering: false,
+    coveringFor: null
+  };
+}
+
 function getCurrentDutyMember() {
-  const memberId = state.queue[state.currentQueueIndex];
-  return state.members[memberId] || state.members.mama;
+  return getCurrentDutyInfo().member;
 }
 
 function handleWashDone(note = '', photo = null) {
-  const currentMember = getCurrentDutyMember();
+  const dutyInfo = getCurrentDutyInfo();
+  const currentMember = dutyInfo.member;
   const user = getCurrentUser();
   const isAdm = isAdmin();
 
@@ -1166,6 +1230,8 @@ function handleWashDone(note = '', photo = null) {
     memberId: currentMember.id,
     prevQueueIndex: state.currentQueueIndex,
     prevStats: { ...state.stats },
+    prevDebts: JSON.parse(JSON.stringify(state.debts || [])),
+    prevPendingTakeover: state.pendingTakeover ? { ...state.pendingTakeover } : null,
     prevDutyStartedAt: state.dutyStartedAt,
     historyItemId: now
   };
@@ -1173,13 +1239,40 @@ function handleWashDone(note = '', photo = null) {
   // 1. Increment individual count
   state.stats[currentMember.id] = (state.stats[currentMember.id] || 0) + 1;
 
-  // 2. Add rich history entry
+  // 2. If this was a debt payback, settle the debt!
+  let noteText = (note || '').trim();
+  if (dutyInfo.isDebtWorkoff) {
+    state.debts = (state.debts || []).filter(d => d.id !== dutyInfo.debt.id);
+    if (!noteText) {
+      noteText = `Отработка долга: возврат смены за ${dutyInfo.scheduledMember.name} 🤝✨`;
+    }
+  }
+
+  // 3. If this was covering a skip, create the debt owed to currentMember!
+  if (dutyInfo.isCovering && state.pendingTakeover) {
+    if (!state.debts) state.debts = [];
+    state.debts.push({
+      id: Date.now(),
+      fromMemberId: state.pendingTakeover.skippedBy,
+      toMemberId: currentMember.id,
+      createdAt: Date.now()
+    });
+    if (!noteText) {
+      noteText = `Выручка смены: помыто за ${dutyInfo.coveringFor.name} (долг начислен) 🛡️🧼`;
+    }
+    state.pendingTakeover = null;
+  }
+
+  // 4. Add rich history entry
   const historyItem = {
     id: now,
     memberId: currentMember.id,
     timestamp: now,
     durationMs: durationMs,
-    note: (note || '').trim(),
+    note: noteText,
+    isDebtWorkoff: dutyInfo.isDebtWorkoff,
+    paidDebtTo: dutyInfo.isDebtWorkoff ? dutyInfo.scheduledMember.id : null,
+    isCovering: dutyInfo.isCovering,
     photo: (typeof photo === 'string' && photo.startsWith('data:image/')) ? photo : null,
     reactions: { love: 0, clap: 0, star: 0 }
   };
@@ -1188,7 +1281,7 @@ function handleWashDone(note = '', photo = null) {
   // Keep up to 200 history entries
   if (state.history.length > 200) state.history.pop();
 
-  // 3. Move queue to next person
+  // 5. Move queue to next person (since scheduled shift was fulfilled)
   state.currentQueueIndex = (state.currentQueueIndex + 1) % state.queue.length;
   state.dutyStartedAt = now;
 
@@ -1207,7 +1300,13 @@ function handleWashDone(note = '', photo = null) {
   // Show Toast
   const verb = (currentMember.id === 'mama') ? 'помыла' : 'помыл';
   const photoText = historyItem.photo ? ' 📸 с фото чистоты!' : '';
-  showUndoToast(`${currentMember.name} ${verb} посуду!${photoText} Отлично! 🧼`);
+  if (dutyInfo.isDebtWorkoff) {
+    showUndoToast(`${currentMember.name} ${verb} посуду и закрыл(а) долг перед ${dutyInfo.scheduledMember.name}! 🤝✨`);
+  } else if (dutyInfo.isCovering) {
+    showUndoToast(`${currentMember.name} ${verb} посуду за ${dutyInfo.coveringFor.name}! Долг начислен 🛡️✨`);
+  } else {
+    showUndoToast(`${currentMember.name} ${verb} посуду!${photoText} Отлично! 🧼`);
+  }
 }
 
 function handleUndo() {
@@ -1222,6 +1321,12 @@ function handleUndo() {
   }
 
   state.stats = { ...undoAction.prevStats };
+  if (undoAction.prevDebts) {
+    state.debts = JSON.parse(JSON.stringify(undoAction.prevDebts));
+  }
+  if (undoAction.prevPendingTakeover !== undefined) {
+    state.pendingTakeover = undoAction.prevPendingTakeover ? { ...undoAction.prevPendingTakeover } : null;
+  }
   state.currentQueueIndex = undoAction.prevQueueIndex;
   state.dutyStartedAt = undoAction.prevDutyStartedAt;
   state.history = state.history.filter(h => h.id !== undoAction.historyItemId);
@@ -1231,13 +1336,57 @@ function handleUndo() {
   saveState(false, 'undo');
   renderAll();
   if (window.soundFx) soundFx.playClick();
-  showToast('Помывка отменена ↩️', 'ℹ️');
+  showToast('Действие отменено ↩️', 'ℹ️');
 }
 
 function handleSkipTurn() {
-  const current = getCurrentDutyMember();
-  state.currentQueueIndex = (state.currentQueueIndex + 1) % state.queue.length;
+  const dutyInfo = getCurrentDutyInfo();
+  const current = dutyInfo.member;
+
+  // Cannot skip a debt workoff shift!
+  if (dutyInfo.isDebtWorkoff) {
+    showToast(`Нельзя пропустить отработку долга! Вы должны вернуть смену ${dutyInfo.scheduledMember.name} 🔒`, '⚠️');
+    if (window.soundFx) soundFx.playPop();
+    return;
+  }
+
+  // Next person takes the shift
+  const nextIdx = (state.currentQueueIndex + 1) % state.queue.length;
+  const nextMemberId = state.queue[nextIdx];
+  const nextMember = state.members[nextMemberId] || current;
+
+  // Store undo action
+  undoAction = {
+    memberId: current.id,
+    prevQueueIndex: state.currentQueueIndex,
+    prevStats: { ...state.stats },
+    prevDebts: JSON.parse(JSON.stringify(state.debts || [])),
+    prevPendingTakeover: state.pendingTakeover ? { ...state.pendingTakeover } : null,
+    prevDutyStartedAt: state.dutyStartedAt,
+    historyItemId: Date.now()
+  };
+
+  // Set pendingTakeover: nextMember will cover current's shift
+  state.pendingTakeover = {
+    skippedBy: current.id,
+    coveredBy: nextMember.id,
+    timestamp: Date.now()
+  };
+
+  state.currentQueueIndex = nextIdx;
   state.dutyStartedAt = Date.now();
+
+  // Add history record for skip
+  const skipHistoryItem = {
+    id: undoAction.historyItemId,
+    memberId: current.id,
+    timestamp: Date.now(),
+    isSkip: true,
+    debtOwedTo: nextMember.id,
+    note: `⏩ Пропуск смены: ${nextMember.name} выручает ${current.name} (будет записан долг) ⚠️`
+  };
+  state.history.unshift(skipHistoryItem);
+  if (state.history.length > 200) state.history.pop();
 
   saveState(false, 'skip');
   renderAll();
@@ -1245,7 +1394,7 @@ function handleSkipTurn() {
     soundFx.playPop();
     soundFx.playHaptic('medium');
   }
-  showUndoToast(`Очередь ${current.name} пропущена ⏩`, 4000);
+  showUndoToast(`Очередь передана ${nextMember.name}. После помывки ${current.name} останется должен 1 смену ⏩`, 6000);
 }
 
 function handleSwapTurn(targetMemberId) {
@@ -1382,7 +1531,9 @@ function renderAll() {
 let lastRenderedQueueHash = '';
 
 function renderDutyTab() {
-  const current = getCurrentDutyMember();
+  const dutyInfo = getCurrentDutyInfo();
+  const current = dutyInfo.member;
+  const debts = getActiveDebts();
 
   // Hero components
   const heroCard = document.getElementById('duty-hero');
@@ -1393,6 +1544,56 @@ function renderDutyTab() {
   const heroTimer = document.getElementById('hero-timer');
   const heroStreak = document.getElementById('hero-streak');
   const heroAura = document.getElementById('hero-aura');
+  const heroDebtBadge = document.getElementById('hero-debt-badge');
+  const washBtnTitle = document.getElementById('wash-btn-title');
+  const washBtnSub = document.getElementById('wash-btn-sub');
+
+  if (heroDebtBadge) {
+    if (dutyInfo.isDebtWorkoff) {
+      heroDebtBadge.className = 'hero-debt-badge workoff';
+      heroDebtBadge.innerHTML = `⚡ ОТРАБОТКА ДОЛГА: за ${dutyInfo.scheduledMember.name} 🤝`;
+      heroDebtBadge.classList.remove('hidden');
+      if (washBtnTitle) washBtnTitle.textContent = 'ЗАКРЫТЬ ДОЛГ! 🧼';
+      if (washBtnSub) washBtnSub.textContent = `Помыть за ${dutyInfo.scheduledMember.name} ✨`;
+    } else if (dutyInfo.isCovering) {
+      heroDebtBadge.className = 'hero-debt-badge workoff';
+      heroDebtBadge.innerHTML = `🛡️ ВЫРУЧАЕТ: ${dutyInfo.member.name} моет за ${dutyInfo.coveringFor.name} 🤝`;
+      heroDebtBadge.classList.remove('hidden');
+      if (washBtnTitle) washBtnTitle.textContent = 'ВЫРУЧИТЬ И ПОМЫТЬ! 🛡️';
+      if (washBtnSub) washBtnSub.textContent = `Записать долг на ${dutyInfo.coveringFor.name} ✨`;
+    } else {
+      const myDebts = debts.filter(d => d.fromMemberId === current.id);
+      const debtsToMe = debts.filter(d => d.toMemberId === current.id);
+
+      if (myDebts.length > 0) {
+        const creditorNames = myDebts.map(d => state.members[d.toMemberId]?.name || 'семьей').join(', ');
+        heroDebtBadge.className = 'hero-debt-badge pending';
+        heroDebtBadge.innerHTML = `⚠️ Висит долг: ${myDebts.length} ${pluralize(myDebts.length, 'мойка', 'мойки', 'моек')} (перед ${creditorNames})`;
+        heroDebtBadge.classList.remove('hidden');
+      } else if (debtsToMe.length > 0) {
+        const debtorNames = debtsToMe.map(d => state.members[d.fromMemberId]?.name || 'кто-то').join(', ');
+        heroDebtBadge.className = 'hero-debt-badge owed';
+        heroDebtBadge.innerHTML = `✨ Вам должны: ${debtsToMe.length} ${pluralize(debtsToMe.length, 'мойку', 'мойки', 'моек')} (${debtorNames})`;
+        heroDebtBadge.classList.remove('hidden');
+      } else {
+        heroDebtBadge.className = 'hero-debt-badge hidden';
+      }
+
+      if (washBtnTitle) washBtnTitle.textContent = 'Я ПОМЫЛ ПОСУДУ!';
+      if (washBtnSub) washBtnSub.textContent = 'Передать очередь дальше ✨';
+    }
+  }
+
+  const skipBtn = document.getElementById('btn-skip-duty');
+  if (skipBtn) {
+    if (dutyInfo.isDebtWorkoff) {
+      skipBtn.style.opacity = '0.4';
+      skipBtn.title = `Нельзя пропустить: долг перед ${dutyInfo.scheduledMember.name}`;
+    } else {
+      skipBtn.style.opacity = '1';
+      skipBtn.title = 'Пропустить дежурство (начислить долг)';
+    }
+  }
 
   if (heroAmbientGlow) {
     heroAmbientGlow.style.background = `radial-gradient(circle at 50% 30%, ${current.color}35 0%, transparent 70%)`;
@@ -1444,7 +1645,7 @@ function renderQueueTrack() {
   const track = document.getElementById('queue-track');
   if (!track) return;
 
-  const currentHash = `${state.currentQueueIndex}:${state.queue.join(',')}`;
+  const currentHash = `${state.currentQueueIndex}:${state.queue.join(',')}:${(state.debts || []).length}:${state.pendingTakeover ? state.pendingTakeover.skippedBy : '0'}`;
   if (currentHash === lastRenderedQueueHash && track.children.length > 0) {
     return; // Queue structure and index unchanged, skip DOM rebuild!
   }
@@ -1468,6 +1669,16 @@ function renderQueueTrack() {
       label = `Через ${turnsAway} ${pluralize(turnsAway, 'смену', 'смены', 'смен')}`;
     }
 
+    const activeDebt = getActiveDebtForMember(memberId);
+    let debtTag = '';
+    if (state.pendingTakeover && state.pendingTakeover.coveredBy === memberId) {
+      const skipped = state.members[state.pendingTakeover.skippedBy] || { name: 'кого-то' };
+      debtTag = `<div class="queue-debt-pill" title="${member.name} выручает ${skipped.name}">🛡️ за ${skipped.name}</div>`;
+    } else if (activeDebt && state.members[activeDebt.fromMemberId]) {
+      const debtor = state.members[activeDebt.fromMemberId];
+      debtTag = `<div class="queue-debt-pill" title="${debtor.name} отработает смену за ${member.name}">⚡ ${debtor.name} за ${member.name}</div>`;
+    }
+
     const card = document.createElement('div');
     card.className = `queue-card ${isActive ? 'active' : ''}`;
     card.innerHTML = `
@@ -1475,6 +1686,7 @@ function renderQueueTrack() {
       <div class="queue-avatar">${member.avatar}</div>
       <div class="queue-name">${member.name}</div>
       <div class="queue-label">${label}</div>
+      ${debtTag}
     `;
 
     card.addEventListener('click', () => {
@@ -1720,24 +1932,32 @@ function renderStats() {
   if (awardsContainer) awardsContainer.innerHTML = '';
 
   const stats = state.stats || {};
-  const memberList = Object.values(state.members || DEFAULT_STATE.members).map(m => ({
-    ...m,
-    count: stats[m.id] || 0
-  }));
+  const debts = getActiveDebts();
 
-  // Sort descending
-  memberList.sort((a, b) => b.count - a.count);
+  const memberList = Object.values(state.members || DEFAULT_STATE.members).map(m => {
+    const count = stats[m.id] || 0;
+    const debtsOwed = debts.filter(d => d.fromMemberId === m.id).length;
+    const debtsWaiting = debts.filter(d => d.toMemberId === m.id).length;
+    const fairScore = count - debtsOwed;
+    return {
+      ...m,
+      count,
+      debtsOwed,
+      debtsWaiting,
+      fairScore
+    };
+  });
+
+  // Sort descending primarily by fairScore, secondarily by count
+  memberList.sort((a, b) => {
+    if (b.fairScore !== a.fairScore) return b.fairScore - a.fairScore;
+    return b.count - a.count;
+  });
 
   const totalWashes = memberList.reduce((sum, m) => sum + m.count, 0);
   if (totalBadge) {
-    const prevBadgeVal = parseInt(totalBadge.getAttribute('data-val'), 10);
-    if (isNaN(prevBadgeVal)) {
-      totalBadge.setAttribute('data-val', totalWashes);
-      totalBadge.textContent = `Всего: ${totalWashes} ${pluralize(totalWashes, 'мойка', 'мойки', 'моек')}`;
-    } else if (prevBadgeVal !== totalWashes) {
-      totalBadge.setAttribute('data-val', totalWashes);
-      animateNumber(totalBadge, prevBadgeVal, totalWashes, 700, v => `Всего: ${v} ${pluralize(v, 'мойка', 'мойки', 'моек')}`);
-    }
+    const badgeText = `Всего: ${totalWashes} ${pluralize(totalWashes, 'мойка', 'мойки', 'моек')}${debts.length > 0 ? ` (долгов: ${debts.length})` : ''}`;
+    totalBadge.textContent = badgeText;
   }
 
   // 1. Render 3D Podium for Top 3
@@ -1764,7 +1984,8 @@ function renderStats() {
             <div class="podium-avatar" style="border-color:${m.color}">${m.avatar}</div>
           </div>
           <div class="podium-name">${m.name}</div>
-          <div class="podium-count">${m.count} ${pluralize(m.count, 'мойка', 'мойки', 'моек')}</div>
+          <div class="podium-count">${m.fairScore} ${pluralize(m.fairScore, 'балл', 'балла', 'баллов')}</div>
+          ${m.debtsOwed > 0 ? `<div class="badge-debt" style="margin:2px auto 0 auto;">⚠️ -${m.debtsOwed} долг</div>` : `<div style="font-size:0.7rem; color:var(--muted);">${m.count} ${pluralize(m.count, 'мойка', 'мойки', 'моек')}</div>`}
           <div class="podium-pillar" style="color:${m.color}">${item.medal}</div>
         `;
         podiumContainer.appendChild(step);
@@ -1832,9 +2053,13 @@ function renderStats() {
           <span class="leader-person-title">${m.title}</span>
         </div>
       </div>
-      <div class="leader-item-right">
-        <span class="leader-washes-num" style="color: ${m.color}">${m.count}</span>
-        <span class="leader-washes-pct">${percent}% от всех</span>
+      <div class="leader-item-right" style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+        <span class="stat-fair-score" style="color:${m.color}">${m.fairScore} ${pluralize(m.fairScore, 'балл', 'балла', 'баллов')}</span>
+        <span class="leader-washes-pct">${m.count} ${pluralize(m.count, 'мойка', 'мойки', 'моек')} (${percent}%)</span>
+        <div style="display:flex; gap:4px; margin-top:2px;">
+          ${m.debtsOwed > 0 ? `<span class="badge-debt">⚠️ Долг: ${m.debtsOwed}</span>` : ''}
+          ${m.debtsWaiting > 0 ? `<span class="badge-owed">🤝 Ждёт: ${m.debtsWaiting}</span>` : ''}
+        </div>
       </div>
     `;
     if (container) container.appendChild(row);
@@ -2567,8 +2792,15 @@ function openSwapModal() {
 }
 
 function openConfirmSkipModal() {
-  const current = getCurrentDutyMember();
+  const dutyInfo = getCurrentDutyInfo();
+  const current = dutyInfo.member;
   if (!current) return;
+
+  if (dutyInfo.isDebtWorkoff) {
+    showToast(`Нельзя пропустить отработку долга! Вы должны вернуть смену ${dutyInfo.scheduledMember.name} 🔒`, '⚠️');
+    if (window.soundFx) soundFx.playPop();
+    return;
+  }
 
   const nextIdx = (state.currentQueueIndex + 1) % state.queue.length;
   const nextMemberId = state.queue[nextIdx];
@@ -2579,6 +2811,7 @@ function openConfirmSkipModal() {
   const nextAvatarEl = document.getElementById('confirm-skip-next-avatar');
   const nextNameEl = document.getElementById('confirm-skip-next-name');
   const descEl = document.getElementById('confirm-skip-desc');
+  const warningEl = document.getElementById('confirm-skip-debt-warning');
 
   if (avatarEl) {
     avatarEl.textContent = current.avatar;
@@ -2598,8 +2831,11 @@ function openConfirmSkipModal() {
       nextNameEl.textContent = nextMember.name;
       nextNameEl.style.color = nextMember.color;
     }
+    if (warningEl) {
+      warningEl.textContent = `⚠️ Вам будет начислен личный долг: 1 мойка перед ${nextMember.name}`;
+    }
     if (descEl) {
-      descEl.textContent = `Очередь ${current.name} будет пропущена, и дежурным сразу станет ${nextMember.name} (без записи помывки в статистику).`;
+      descEl.textContent = `Очередь перейдёт к ${nextMember.name}. Вы будете обязаны отработать мойку за ${nextMember.name}, когда подойдёт его очередь!`;
     }
   }
 

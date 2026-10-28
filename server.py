@@ -79,7 +79,9 @@ DEFAULT_STATE = {
     "currentQueueIndex": 0,
     "dutyStartedAt": 0,
     "stats": {"mama": 0, "papa": 0, "serezha": 0, "vasya": 0},
-    "history": []
+    "history": [],
+    "debts": [],
+    "pendingTakeover": None
 }
 
 # --------------------------------------------------------
@@ -156,6 +158,11 @@ def init_in_memory_state():
                     json.dump(loaded, f, ensure_ascii=False, indent=2)
             except Exception as e:
                 print(f"[State] Ошибка записи data.json: {e}")
+        else:
+            if "debts" not in loaded or not isinstance(loaded["debts"], list):
+                loaded["debts"] = []
+            if "pendingTakeover" not in loaded:
+                loaded["pendingTakeover"] = None
 
         CURRENT_STATE = loaded
         STATE_VERSION = int(time.time() * 1000)
@@ -178,6 +185,10 @@ def save_state(data=None):
                 merged.update(data)
                 if "members" not in data or not data["members"]:
                     merged["members"] = DEFAULT_STATE["members"]
+                if "debts" not in data or not isinstance(data["debts"], list):
+                    merged["debts"] = []
+                if "pendingTakeover" not in data:
+                    merged["pendingTakeover"] = None
             CURRENT_STATE = merged
         STATE_VERSION = int(time.time() * 1000)
         STATE_ETAG = f'"{STATE_VERSION}"'
@@ -616,6 +627,29 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                         if len(CURRENT_STATE["history"]) > 200:
                             CURRENT_STATE["history"].pop()
 
+                        # Settle debt or sync debts
+                        if isinstance(state_data.get("debts"), list):
+                            CURRENT_STATE["debts"] = state_data["debts"]
+                        else:
+                            scheduled_member = curr_q[curr_idx]
+                            debts = CURRENT_STATE.get("debts", [])
+                            for i, d in enumerate(debts):
+                                if d.get("toMemberId") == scheduled_member:
+                                    debts.pop(i)
+                                    break
+
+                        if "pendingTakeover" in state_data:
+                            CURRENT_STATE["pendingTakeover"] = state_data["pendingTakeover"]
+                        elif CURRENT_STATE.get("pendingTakeover") and CURRENT_STATE["pendingTakeover"].get("coveredBy") == washer:
+                            debts = CURRENT_STATE.setdefault("debts", [])
+                            debts.append({
+                                "id": int(time.time() * 1000),
+                                "fromMemberId": CURRENT_STATE["pendingTakeover"].get("skippedBy"),
+                                "toMemberId": washer,
+                                "createdAt": int(time.time() * 1000)
+                            })
+                            CURRENT_STATE["pendingTakeover"] = None
+
                         if curr_q:
                             CURRENT_STATE["currentQueueIndex"] = (curr_idx + 1) % len(curr_q)
                         CURRENT_STATE["dutyStartedAt"] = now_ts
@@ -655,6 +689,10 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                             CURRENT_STATE["dutyStartedAt"] = CURRENT_STATE["history"][0].get("timestamp", int(time.time() * 1000))
                         else:
                             CURRENT_STATE["dutyStartedAt"] = int(time.time() * 1000)
+                        if isinstance(state_data.get("debts"), list):
+                            CURRENT_STATE["debts"] = state_data["debts"]
+                        if "pendingTakeover" in state_data:
+                            CURRENT_STATE["pendingTakeover"] = state_data["pendingTakeover"]
                         save_state(CURRENT_STATE)
 
                     elif action in ["skip", "swap"]:
@@ -672,7 +710,20 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
 
                         if action == "skip":
                             if curr_q:
-                                CURRENT_STATE["currentQueueIndex"] = (curr_idx + 1) % len(curr_q)
+                                skipped_member = curr_duty_id
+                                next_idx = (curr_idx + 1) % len(curr_q)
+                                next_member = curr_q[next_idx]
+                                if "pendingTakeover" in state_data:
+                                    CURRENT_STATE["pendingTakeover"] = state_data["pendingTakeover"]
+                                else:
+                                    CURRENT_STATE["pendingTakeover"] = {
+                                        "skippedBy": skipped_member,
+                                        "coveredBy": next_member,
+                                        "timestamp": int(time.time() * 1000)
+                                    }
+                                CURRENT_STATE["currentQueueIndex"] = next_idx
+                            if isinstance(state_data.get("debts"), list):
+                                CURRENT_STATE["debts"] = state_data["debts"]
                             CURRENT_STATE["dutyStartedAt"] = int(time.time() * 1000)
                             save_state(CURRENT_STATE)
                         elif action == "swap":
