@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 .wrangler/
 .DS_Store
+maintenance.flag
+*.bak.*

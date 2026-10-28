@@ -15,6 +15,11 @@ const PORT = process.env.PORT || 8080;
 const DATA_FILE = path.join(__dirname, 'data.json');
 const PUBLIC_DIR = path.resolve(__dirname, 'public');
 const AUTH_SECRET = 'family_dish_secret_2026';
+const MAINTENANCE_FILE = path.join(__dirname, 'maintenance.flag');
+
+function isMaintenanceMode() {
+  return fs.existsSync(MAINTENANCE_FILE);
+}
 
 // Семейные аккаунты
 const ACCOUNTS = {
@@ -201,6 +206,34 @@ const server = http.createServer((req, res) => {
   }
 
   const url = new URL(req.url, `http://${req.headers.host}`);
+
+  // 0. Maintenance Mode Interceptor
+  if (isMaintenanceMode()) {
+    if (url.pathname.startsWith('/api/')) {
+      const payload = Buffer.from(JSON.stringify({
+        maintenance: true,
+        error: 'Ведутся технические работы. Сервер временно недоступен.'
+      }));
+      res.writeHead(503, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Retry-After': '5',
+        'Content-Length': payload.length
+      });
+      res.end(payload);
+      return;
+    }
+
+    const maintenancePath = path.join(PUBLIC_DIR, 'maintenance.html');
+    if ((url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/maintenance.html') && fs.existsSync(maintenancePath)) {
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate'
+      });
+      fs.createReadStream(maintenancePath).pipe(res);
+      return;
+    }
+  }
 
   // 1. API: Get Current Master State (ETag 304 + In-Memory)
   if (url.pathname === '/api/state' && (req.method === 'GET' || req.method === 'HEAD')) {

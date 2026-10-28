@@ -973,6 +973,14 @@ async function fetchStateOnce(force = false) {
       return;
     }
 
+    if (res.status === 503) {
+      const errData = await res.json().catch(() => ({}));
+      if (errData && errData.maintenance) {
+        window.location.href = './maintenance.html';
+        return;
+      }
+    }
+
     if (res.ok) {
       const etag = res.headers.get('ETag');
       if (etag) lastServerETag = etag;

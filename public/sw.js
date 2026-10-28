@@ -1,9 +1,10 @@
-const CACHE_NAME = 'dish-duty-v11';
+const CACHE_NAME = 'dish-duty-v12';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './app.js',
+  './maintenance.html',
   './manifest.json',
   './icons/icon.svg',
   './icons/icon-192.png',

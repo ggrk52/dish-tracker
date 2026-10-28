@@ -22,6 +22,7 @@ PORT = int(os.environ.get("PORT", 8080))
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 PUBLIC_DIR = os.path.abspath(os.path.join(BASE_DIR, "public"))
 DATA_FILE = os.path.join(BASE_DIR, "data.json")
+MAINTENANCE_FILE = os.path.join(BASE_DIR, "maintenance.flag")
 
 AUTH_SECRET = "family_dish_secret_2026"
 
@@ -320,6 +321,32 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
     def handle_get(self, head_only=False):
         parsed = urlparse(self.path)
 
+        # 0. Maintenance Mode
+        if os.path.exists(MAINTENANCE_FILE):
+            if parsed.path.startswith("/api/"):
+                payload = json.dumps({"maintenance": True, "error": "Ведутся технические работы. Сервер временно недоступен."}).encode("utf-8")
+                self.send_response(503)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                if not head_only:
+                    self.wfile.write(payload)
+                return
+            if parsed.path in ["/", "/index.html", "/maintenance.html"]:
+                m_path = os.path.join(PUBLIC_DIR, "maintenance.html")
+                if os.path.exists(m_path):
+                    with open(m_path, "rb") as mf:
+                        content = mf.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", str(len(content)))
+                    self.end_headers()
+                    if not head_only:
+                        self.wfile.write(content)
+                    return
+
         # 1. API: Состояние (In-Memory + ETag 304 + Gzip)
         if parsed.path == "/api/state":
             with STATE_LOCK:
@@ -421,6 +448,16 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+
+        if os.path.exists(MAINTENANCE_FILE):
+            payload = json.dumps({"maintenance": True, "error": "Ведутся технические работы."}).encode("utf-8")
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
 
         # 1. Login Endpoint
         if parsed.path == "/api/login":
