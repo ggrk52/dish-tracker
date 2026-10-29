@@ -33,11 +33,17 @@
       "title": "Повелитель тарелок"
     }
   },
+  "baseQueue": [
+    "serezha",
+    "mama",
+    "vasya",
+    "papa"
+  ],
   "queue": [
     "serezha",
-    "papa",
+    "mama",
     "vasya",
-    "mama"
+    "papa"
   ],
   "currentQueueIndex": 0,
   "dutyStartedAt": 0,
