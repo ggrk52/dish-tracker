@@ -42,6 +42,9 @@ if [ ! -d ".git" ]; then
   git remote add origin https://github.com/ggrk52/dish-tracker.git || git remote set-url origin https://github.com/ggrk52/dish-tracker.git
 fi
 
+git update-index --no-skip-worktree data.json 2>/dev/null || true
+git update-index --no-assume-unchanged data.json 2>/dev/null || true
+git checkout --force data.json 2>/dev/null || true
 git fetch origin main
 git reset --hard origin/main
 
