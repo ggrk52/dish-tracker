@@ -15,7 +15,8 @@ const DEFAULT_STATE = {
     serezha: { id: 'serezha', name: 'Серёжа', avatar: '👦', color: '#10b981', title: 'Мастер мыльной пены' },
     vasya: { id: 'vasya', name: 'Вася', avatar: '🧒', color: '#f59e0b', title: 'Повелитель тарелок' }
   },
-  queue: ['mama', 'papa', 'serezha', 'vasya'],
+  baseQueue: ['serezha', 'mama', 'vasya', 'papa'],
+  queue: ['serezha', 'mama', 'vasya', 'papa'],
   currentQueueIndex: 0,
   dutyStartedAt: Date.now(),
   stats: {
@@ -293,9 +294,13 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return JSON.parse(JSON.stringify(DEFAULT_STATE));
     const parsed = JSON.parse(raw);
+    const baseQueue = (Array.isArray(parsed.baseQueue) && parsed.baseQueue.length > 0)
+      ? parsed.baseQueue
+      : (Array.isArray(parsed.queue) ? [...parsed.queue] : [...DEFAULT_STATE.baseQueue]);
     return {
       ...DEFAULT_STATE,
       ...parsed,
+      baseQueue,
       debts: Array.isArray(parsed.debts) ? parsed.debts : [],
       pendingTakeover: parsed.pendingTakeover || null
     };
@@ -928,17 +933,23 @@ function applyServerState(serverState) {
 
   const sTakeover = serverState.pendingTakeover ? `${serverState.pendingTakeover.skippedBy}->${serverState.pendingTakeover.coveredBy}` : 'none';
   const lTakeover = state.pendingTakeover ? `${state.pendingTakeover.skippedBy}->${state.pendingTakeover.coveredBy}` : 'none';
-  const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}-${(serverState.debts || []).length}-${sTakeover}`;
-  const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}-${(state.debts || []).length}-${lTakeover}`;
+  const sBase = Array.isArray(serverState.baseQueue) ? serverState.baseQueue.join(',') : '';
+  const lBase = Array.isArray(state.baseQueue) ? state.baseQueue.join(',') : '';
+  const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}-${(serverState.debts || []).length}-${sTakeover}-${sBase}`;
+  const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}-${(state.debts || []).length}-${lTakeover}-${lBase}`;
 
   const wasInitial = !isInitialSyncDone;
   isInitialSyncDone = true;
 
   if (sHash !== lHash || wasInitial) {
     const prevWasher = getCurrentDutyMember() ? getCurrentDutyMember().name : null;
+    const baseQueue = (Array.isArray(serverState.baseQueue) && serverState.baseQueue.length > 0)
+      ? serverState.baseQueue
+      : (Array.isArray(serverState.queue) ? [...serverState.queue] : [...DEFAULT_STATE.baseQueue]);
     state = {
       ...DEFAULT_STATE,
       ...serverState,
+      baseQueue,
       debts: Array.isArray(serverState.debts) ? serverState.debts : [],
       pendingTakeover: serverState.pendingTakeover || null
     };
@@ -1229,6 +1240,8 @@ function handleWashDone(note = '', photo = null) {
   undoAction = {
     memberId: currentMember.id,
     prevQueueIndex: state.currentQueueIndex,
+    prevQueue: [...state.queue],
+    prevBaseQueue: state.baseQueue ? [...state.baseQueue] : null,
     prevStats: { ...state.stats },
     prevDebts: JSON.parse(JSON.stringify(state.debts || [])),
     prevPendingTakeover: state.pendingTakeover ? { ...state.pendingTakeover } : null,
@@ -1282,7 +1295,16 @@ function handleWashDone(note = '', photo = null) {
   if (state.history.length > 200) state.history.pop();
 
   // 5. Move queue to next person (since scheduled shift was fulfilled)
-  state.currentQueueIndex = (state.currentQueueIndex + 1) % state.queue.length;
+  const isEndOfCycle = (state.currentQueueIndex >= state.queue.length - 1);
+  if (isEndOfCycle) {
+    // Cycle completed! Reset to canonical baseQueue for the new cycle
+    if (Array.isArray(state.baseQueue) && state.baseQueue.length === state.queue.length) {
+      state.queue = [...state.baseQueue];
+    }
+    state.currentQueueIndex = 0;
+  } else {
+    state.currentQueueIndex = state.currentQueueIndex + 1;
+  }
   state.dutyStartedAt = now;
 
   saveState(false, 'wash');
@@ -1326,6 +1348,12 @@ function handleUndo() {
   }
   if (undoAction.prevPendingTakeover !== undefined) {
     state.pendingTakeover = undoAction.prevPendingTakeover ? { ...undoAction.prevPendingTakeover } : null;
+  }
+  if (undoAction.prevQueue) {
+    state.queue = [...undoAction.prevQueue];
+  }
+  if (undoAction.prevBaseQueue) {
+    state.baseQueue = [...undoAction.prevBaseQueue];
   }
   state.currentQueueIndex = undoAction.prevQueueIndex;
   state.dutyStartedAt = undoAction.prevDutyStartedAt;
@@ -1403,6 +1431,22 @@ function handleSwapTurn(targetMemberId) {
 
   const targetIdx = state.queue.indexOf(targetMemberId);
   if (targetIdx !== -1) {
+    if (!Array.isArray(state.baseQueue) || state.baseQueue.length !== state.queue.length) {
+      state.baseQueue = [...state.queue];
+    }
+
+    undoAction = {
+      memberId: currentMember.id,
+      prevQueueIndex: state.currentQueueIndex,
+      prevQueue: [...state.queue],
+      prevBaseQueue: [...state.baseQueue],
+      prevStats: { ...state.stats },
+      prevDebts: JSON.parse(JSON.stringify(state.debts || [])),
+      prevPendingTakeover: state.pendingTakeover ? { ...state.pendingTakeover } : null,
+      prevDutyStartedAt: state.dutyStartedAt,
+      historyItemId: Date.now()
+    };
+
     const temp = state.queue[state.currentQueueIndex];
     state.queue[state.currentQueueIndex] = state.queue[targetIdx];
     state.queue[targetIdx] = temp;
@@ -1415,6 +1459,7 @@ function handleSwapTurn(targetMemberId) {
       soundFx.playHaptic('medium');
     }
     closeAllModals();
+    showToast(`Обмен применён на текущий круг. В конце цикла очередь вернётся к исходной 🔄`, 'ℹ️');
   }
 }
 
@@ -1645,7 +1690,8 @@ function renderQueueTrack() {
   const track = document.getElementById('queue-track');
   if (!track) return;
 
-  const currentHash = `${state.currentQueueIndex}:${state.queue.join(',')}:${(state.debts || []).length}:${state.pendingTakeover ? state.pendingTakeover.skippedBy : '0'}`;
+  const currentBase = Array.isArray(state.baseQueue) ? state.baseQueue.join(',') : '';
+  const currentHash = `${state.currentQueueIndex}:${state.queue.join(',')}:${currentBase}:${(state.debts || []).length}:${state.pendingTakeover ? state.pendingTakeover.skippedBy : '0'}`;
   if (currentHash === lastRenderedQueueHash && track.children.length > 0) {
     return; // Queue structure and index unchanged, skip DOM rebuild!
   }
@@ -1696,6 +1742,18 @@ function renderQueueTrack() {
 
     track.appendChild(card);
   });
+
+  const swapNotice = document.getElementById('queue-swap-notice');
+  if (swapNotice) {
+    const isSwapped = Array.isArray(state.baseQueue) && state.baseQueue.length === state.queue.length && state.queue.join(',') !== state.baseQueue.join(',');
+    if (isSwapped) {
+      swapNotice.innerHTML = `<span>🔄</span> <span>Активен временный обмен на этот круг. После 4-го дежурного очередь вернётся к исходной.</span>`;
+      swapNotice.classList.remove('hidden');
+    } else {
+      swapNotice.classList.add('hidden');
+      swapNotice.innerHTML = '';
+    }
+  }
 }
 
 function renderActivityGlance() {
@@ -2886,6 +2944,7 @@ function openReorderModal() {
 
   document.getElementById('btn-save-reorder-modal').onclick = () => {
     requireAdmin(() => {
+      state.baseQueue = [...tempQueue];
       state.queue = [...tempQueue];
       state.currentQueueIndex = 0;
       state.dutyStartedAt = Date.now();
@@ -2893,6 +2952,7 @@ function openReorderModal() {
       renderAll();
       closeAllModals();
       soundFx.playVictory();
+      showToast('Базовый порядок очереди сохранён! ✨', '✅');
     });
   };
 

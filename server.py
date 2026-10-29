@@ -75,7 +75,8 @@ DEFAULT_STATE = {
         "serezha": {"id": "serezha", "name": "Серёжа", "role": "Сын", "avatar": "👦", "color": "#10b981", "title": "Мастер мыльной пены"},
         "vasya": {"id": "vasya", "name": "Вася", "role": "Сын", "avatar": "🧒", "color": "#f59e0b", "title": "Повелитель тарелок"}
     },
-    "queue": ["mama", "papa", "serezha", "vasya"],
+    "baseQueue": ["serezha", "mama", "vasya", "papa"],
+    "queue": ["serezha", "mama", "vasya", "papa"],
     "currentQueueIndex": 0,
     "dutyStartedAt": 0,
     "stats": {"mama": 0, "papa": 0, "serezha": 0, "vasya": 0},
@@ -159,6 +160,8 @@ def init_in_memory_state():
             except Exception as e:
                 print(f"[State] Ошибка записи data.json: {e}")
         else:
+            if "baseQueue" not in loaded or not isinstance(loaded["baseQueue"], list):
+                loaded["baseQueue"] = list(loaded.get("queue", DEFAULT_STATE["baseQueue"]))
             if "debts" not in loaded or not isinstance(loaded["debts"], list):
                 loaded["debts"] = []
             if "pendingTakeover" not in loaded:
@@ -185,6 +188,8 @@ def save_state(data=None):
                 merged.update(data)
                 if "members" not in data or not data["members"]:
                     merged["members"] = DEFAULT_STATE["members"]
+                if "baseQueue" not in data or not isinstance(data["baseQueue"], list):
+                    merged["baseQueue"] = list(data.get("queue", DEFAULT_STATE["baseQueue"]))
                 if "debts" not in data or not isinstance(data["debts"], list):
                     merged["debts"] = []
                 if "pendingTakeover" not in data:
@@ -651,7 +656,14 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                             CURRENT_STATE["pendingTakeover"] = None
 
                         if curr_q:
-                            CURRENT_STATE["currentQueueIndex"] = (curr_idx + 1) % len(curr_q)
+                            is_end_of_cycle = (curr_idx >= len(curr_q) - 1)
+                            if is_end_of_cycle:
+                                base_q = CURRENT_STATE.get("baseQueue")
+                                if isinstance(base_q, list) and len(base_q) == len(curr_q):
+                                    CURRENT_STATE["queue"] = list(base_q)
+                                CURRENT_STATE["currentQueueIndex"] = 0
+                            else:
+                                CURRENT_STATE["currentQueueIndex"] = (curr_idx + 1) % len(curr_q)
                         CURRENT_STATE["dutyStartedAt"] = now_ts
                         save_state(CURRENT_STATE)
 
@@ -684,11 +696,15 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                         if "stats" in CURRENT_STATE and last_washer in CURRENT_STATE["stats"]:
                             CURRENT_STATE["stats"][last_washer] = max(0, CURRENT_STATE["stats"][last_washer] - 1)
                         if curr_q:
-                            CURRENT_STATE["currentQueueIndex"] = (curr_idx - 1) % len(curr_q)
+                            CURRENT_STATE["currentQueueIndex"] = (curr_idx - 1 + len(curr_q)) % len(curr_q)
                         if CURRENT_STATE.get("history"):
                             CURRENT_STATE["dutyStartedAt"] = CURRENT_STATE["history"][0].get("timestamp", int(time.time() * 1000))
                         else:
                             CURRENT_STATE["dutyStartedAt"] = int(time.time() * 1000)
+                        if isinstance(state_data.get("queue"), list):
+                            CURRENT_STATE["queue"] = state_data["queue"]
+                        if isinstance(state_data.get("baseQueue"), list):
+                            CURRENT_STATE["baseQueue"] = state_data["baseQueue"]
                         if isinstance(state_data.get("debts"), list):
                             CURRENT_STATE["debts"] = state_data["debts"]
                         if "pendingTakeover" in state_data:
@@ -729,6 +745,8 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                         elif action == "swap":
                             client_q = state_data.get("queue")
                             if isinstance(client_q, list) and sorted(client_q) == sorted(curr_q):
+                                if not isinstance(CURRENT_STATE.get("baseQueue"), list) or len(CURRENT_STATE["baseQueue"]) != len(client_q):
+                                    CURRENT_STATE["baseQueue"] = list(curr_q)
                                 CURRENT_STATE["queue"] = list(client_q)
                                 CURRENT_STATE["dutyStartedAt"] = int(time.time() * 1000)
                                 save_state(CURRENT_STATE)
@@ -749,7 +767,11 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                         elif action == "reorder":
                             client_q = state_data.get("queue")
                             if isinstance(client_q, list) and sorted(client_q) == sorted(curr_q):
+                                CURRENT_STATE["baseQueue"] = list(client_q)
                                 CURRENT_STATE["queue"] = list(client_q)
+                                CURRENT_STATE["currentQueueIndex"] = 0
+                                CURRENT_STATE["dutyStartedAt"] = int(time.time() * 1000)
+                                save_state(CURRENT_STATE)
                             else:
                                 err_body = json.dumps({"error": "Некорректная очередь"}, ensure_ascii=False).encode("utf-8")
                                 self.send_response(400)

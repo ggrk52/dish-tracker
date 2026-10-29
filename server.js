@@ -98,7 +98,8 @@ const DEFAULT_STATE = {
     serezha: { id: 'serezha', name: 'Серёжа', role: 'Сын', avatar: '👦', color: '#10b981', title: 'Мастер мыльной пены' },
     vasya: { id: 'vasya', name: 'Вася', role: 'Сын', avatar: '🧒', color: '#f59e0b', title: 'Повелитель тарелок' }
   },
-  queue: ['mama', 'papa', 'serezha', 'vasya'],
+  baseQueue: ['serezha', 'mama', 'vasya', 'papa'],
+  queue: ['serezha', 'mama', 'vasya', 'papa'],
   currentQueueIndex: 0,
   dutyStartedAt: Date.now(),
   stats: { mama: 0, papa: 0, serezha: 0, vasya: 0 },
@@ -123,6 +124,7 @@ function getOrCreateState() {
       const data = JSON.parse(raw);
       if (data && data.queue && data.members) {
         memoryState = data;
+        if (!Array.isArray(memoryState.baseQueue)) memoryState.baseQueue = [...memoryState.queue];
         if (!Array.isArray(memoryState.debts)) memoryState.debts = [];
         if (memoryState.pendingTakeover === undefined) memoryState.pendingTakeover = null;
         stateJsonStr = JSON.stringify(memoryState);
@@ -145,6 +147,7 @@ function saveStateToDisk(data) {
   const base = JSON.parse(JSON.stringify(DEFAULT_STATE));
   memoryState = { ...base, ...data };
   if (!data.members) memoryState.members = base.members;
+  if (!Array.isArray(data.baseQueue)) memoryState.baseQueue = Array.isArray(base.baseQueue) ? [...base.baseQueue] : [...memoryState.queue];
   if (!Array.isArray(data.debts)) memoryState.debts = [];
   if (data.pendingTakeover === undefined) memoryState.pendingTakeover = null;
   stateVersion = Date.now();
@@ -459,7 +462,15 @@ const server = http.createServer((req, res) => {
           }
 
           if (currQ.length > 0) {
-            currState.currentQueueIndex = (currIdx + 1) % currQ.length;
+            const isEndOfCycle = (currIdx >= currQ.length - 1);
+            if (isEndOfCycle) {
+              if (Array.isArray(currState.baseQueue) && currState.baseQueue.length === currQ.length) {
+                currState.queue = [...currState.baseQueue];
+              }
+              currState.currentQueueIndex = 0;
+            } else {
+              currState.currentQueueIndex = (currIdx + 1) % currQ.length;
+            }
           }
           currState.dutyStartedAt = nowTs;
           saveStateToDisk(currState);
@@ -489,6 +500,12 @@ const server = http.createServer((req, res) => {
             currState.dutyStartedAt = currState.history[0].timestamp || Date.now();
           } else {
             currState.dutyStartedAt = Date.now();
+          }
+          if (Array.isArray(parsedState.queue)) {
+            currState.queue = parsedState.queue;
+          }
+          if (Array.isArray(parsedState.baseQueue)) {
+            currState.baseQueue = parsedState.baseQueue;
           }
           if (Array.isArray(parsedState.debts)) {
             currState.debts = parsedState.debts;
@@ -531,6 +548,9 @@ const server = http.createServer((req, res) => {
           } else if (action === 'swap') {
             const clientQ = parsedState.queue;
             if (Array.isArray(clientQ) && [...clientQ].sort().join(',') === [...currQ].sort().join(',')) {
+              if (!Array.isArray(currState.baseQueue) || currState.baseQueue.length !== clientQ.length) {
+                currState.baseQueue = [...currQ];
+              }
               currState.queue = [...clientQ];
               currState.dutyStartedAt = Date.now();
               saveStateToDisk(currState);
@@ -546,7 +566,10 @@ const server = http.createServer((req, res) => {
           } else if (action === 'reorder') {
             const clientQ = parsedState.queue;
             if (Array.isArray(clientQ) && [...clientQ].sort().join(',') === [...currQ].sort().join(',')) {
+              currState.baseQueue = [...clientQ];
               currState.queue = [...clientQ];
+              currState.currentQueueIndex = 0;
+              currState.dutyStartedAt = Date.now();
               saveStateToDisk(currState);
             } else {
               res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });

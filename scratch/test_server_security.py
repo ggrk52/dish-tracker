@@ -170,10 +170,15 @@ def test_server(server_cmd, server_name):
         # Get initial state
         _, _, b = request(f"{base_url}/api/state")
         state = json.loads(b.decode())
+        user_tokens = {
+            "serezha": admin_token,
+            "mama": mama_token,
+            "papa": papa_token
+        }
         curr_duty_id = state["queue"][state["currentQueueIndex"]]
-        other_user = "papa" if curr_duty_id == "mama" else "mama"
-        other_token = papa_token if other_user == "papa" else mama_token
-        duty_token = mama_token if curr_duty_id == "mama" else papa_token
+        other_user = "papa" if curr_duty_id != "papa" else "mama"
+        other_token = user_tokens[other_user]
+        duty_token = user_tokens[curr_duty_id]
 
         # 3.1 Non-admin trying arbitrary full state overwrite / queue reorder
         tampered_state = dict(state)

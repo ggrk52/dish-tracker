@@ -743,6 +743,23 @@ body::before {
   display: inline-block;
 }
 
+.queue-swap-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fef08a;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.76rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  margin-top: 10px;
+  line-height: 1.35;
+  animation: fadeIn 0.3s ease;
+}
+
 @keyframes pulseNode {
   0% { transform: scale(0.9); opacity: 0.7; }
   50% { transform: scale(1.2); opacity: 1; }
