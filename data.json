@@ -45,15 +45,35 @@
     "vasya",
     "papa"
   ],
-  "currentQueueIndex": 0,
-  "dutyStartedAt": 0,
+  "currentQueueIndex": 2,
+  "dutyStartedAt": 1793813683000,
   "stats": {
     "mama": 0,
     "papa": 0,
-    "serezha": 0,
+    "serezha": 1,
     "vasya": 0
   },
-  "history": [],
-  "debts": [],
+  "history": [
+    {
+      "id": 1793813683000,
+      "memberId": "serezha",
+      "timestamp": 1793813683000,
+      "durationMs": 0,
+      "note": "Отработка долга: возврат смены за Маму 🤝✨ (остался 1 долг)",
+      "isDebtWorkoff": true,
+      "paidDebtTo": "mama",
+      "isCovering": false,
+      "photo": null,
+      "reactions": { "love": 0, "clap": 0, "star": 0 }
+    }
+  ],
+  "debts": [
+    {
+      "id": 1793813683000,
+      "fromMemberId": "serezha",
+      "toMemberId": "mama",
+      "createdAt": 1793813683000
+    }
+  ],
   "pendingTakeover": null
 }
