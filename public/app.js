@@ -599,23 +599,36 @@ window.soundFx = soundFx;
 class CelebrationFX {
   constructor(canvasId) {
     this.canvas = document.getElementById(canvasId);
-    this.ctx = this.canvas.getContext('2d');
+    this.ctx = this.canvas && typeof this.canvas.getContext === 'function' ? this.canvas.getContext('2d') : null;
     this.particles = [];
     this.animating = false;
-    this.resize();
-    window.addEventListener('resize', () => this.resize());
+    this.resizeTimer = null;
+    if (this.canvas) {
+      this.resize();
+      window.addEventListener('resize', () => {
+        if (this.resizeTimer) clearTimeout(this.resizeTimer);
+        this.resizeTimer = setTimeout(() => this.resize(), 200);
+      }, { passive: true });
+    }
   }
 
   resize() {
+    if (!this.canvas) return;
     this.width = this.canvas.width = window.innerWidth;
     this.height = this.canvas.height = window.innerHeight;
   }
 
   burst(accentColor = '#2563eb') {
+    if (!this.canvas || !this.ctx) return;
     this.resize();
     const colors = [accentColor, '#facc15', '#38bdf8', '#4ade80', '#ec4899', '#ffffff'];
 
-    for (let i = 0; i < 90; i++) {
+    const isLowPower = window.innerWidth < 640 || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+    const confettiCount = isLowPower ? 55 : 90;
+    const bubbleCount = isLowPower ? 20 : 35;
+    const sparkleCount = isLowPower ? 14 : 24;
+
+    for (let i = 0; i < confettiCount; i++) {
       this.particles.push({
         type: 'confetti',
         x: this.width / 2 + (Math.random() - 0.5) * 160,
@@ -630,7 +643,7 @@ class CelebrationFX {
       });
     }
 
-    for (let i = 0; i < 35; i++) {
+    for (let i = 0; i < bubbleCount; i++) {
       this.particles.push({
         type: 'bubble',
         x: this.width * Math.random(),
@@ -644,7 +657,7 @@ class CelebrationFX {
     }
 
     // 4-pointed golden sparkling stars
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < sparkleCount; i++) {
       this.particles.push({
         type: 'sparkle',
         x: this.width / 2 + (Math.random() - 0.5) * 220,
@@ -766,6 +779,7 @@ class GestureController {
     this.isRefreshing = false;
     this.isSheetDrag = false;
     this.activeSheet = null;
+    this.rafPending = false;
     this.init();
   }
 
@@ -814,42 +828,52 @@ class GestureController {
       const touch = e.touches[0];
       this.currentX = touch.clientX;
       this.currentY = touch.clientY;
-      const dx = this.currentX - this.startX;
-      const dy = this.currentY - this.startY;
 
-      // 1. Bottom Sheet dragging
-      if (this.isSheetDrag && this.activeSheet) {
-        if (dy > 0) {
-          this.activeSheet.style.transform = `translateY(${dy}px)`;
-          this.activeSheet.style.transition = 'none';
-        }
-        return;
-      }
+      if (!this.rafPending) {
+        this.rafPending = true;
+        requestAnimationFrame(() => {
+          this.rafPending = false;
+          if (!this.isDragging) return;
 
-      // 2. Pull-to-Refresh dragging
-      if (this.isPTR && ptrIndicator && !this.isRefreshing) {
-        const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
-        if (scrollY <= 2 && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
-          const pullDist = Math.min(dy * 0.42, 70);
-          if (pullDist > 8) {
-            ptrIndicator.style.height = `${pullDist}px`;
-            ptrIndicator.style.opacity = `${Math.min(pullDist / 36, 1)}`;
-            if (ptrIcon) ptrIcon.style.transform = `rotate(${pullDist * 4.5}deg)`;
-            if (ptrText) {
-              ptrText.textContent = pullDist >= 44 ? 'Отпустите для обновления...' : 'Потяните для обновления...';
+          const dx = this.currentX - this.startX;
+          const dy = this.currentY - this.startY;
+
+          // 1. Bottom Sheet dragging
+          if (this.isSheetDrag && this.activeSheet) {
+            if (dy > 0) {
+              this.activeSheet.style.transform = `translateY(${dy}px)`;
+              this.activeSheet.style.transition = 'none';
+            }
+            return;
+          }
+
+          // 2. Pull-to-Refresh dragging
+          if (this.isPTR && ptrIndicator && !this.isRefreshing) {
+            const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+            if (scrollY <= 2 && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
+              const pullDist = Math.min(dy * 0.42, 70);
+              if (pullDist > 8) {
+                ptrIndicator.style.height = `${pullDist}px`;
+                ptrIndicator.style.opacity = `${Math.min(pullDist / 36, 1)}`;
+                if (ptrIcon) ptrIcon.style.transform = `rotate(${pullDist * 4.5}deg)`;
+                if (ptrText) {
+                  ptrText.textContent = pullDist >= 44 ? 'Отпустите для обновления...' : 'Потяните для обновления...';
+                }
+              }
+            } else if (dy < 0) {
+              this.isPTR = false;
+              ptrIndicator.style.height = '0px';
+              ptrIndicator.style.opacity = '0';
             }
           }
-        } else if (dy < 0) {
-          this.isPTR = false;
-          ptrIndicator.style.height = '0px';
-          ptrIndicator.style.opacity = '0';
-        }
+        });
       }
     }, { passive: true });
 
     document.addEventListener('touchend', async () => {
       if (!this.isDragging) return;
       this.isDragging = false;
+      this.rafPending = false;
       const dx = this.currentX - this.startX;
       const dy = this.currentY - this.startY;
 
@@ -1573,6 +1597,73 @@ function updateTabIndicator(activeBtn) {
   indicator.style.opacity = '1';
 }
 
+// High-performance DOM Element Cache for low-end mobile devices
+const domCache = new Map();
+function getCachedEl(id) {
+  let el = domCache.get(id);
+  if (!el || (typeof el.isConnected === 'boolean' && !el.isConnected)) {
+    el = document.getElementById(id);
+    if (el) domCache.set(id, el);
+  }
+  return el;
+}
+
+let isDutyDirty = true;
+let isHistoryDirty = true;
+let isStatsDirty = true;
+
+function markAllTabsDirty() {
+  isDutyDirty = true;
+  isHistoryDirty = true;
+  isStatsDirty = true;
+}
+
+function updateLiveTickers() {
+  if (state.activeWash && state.activeWash.startedAt) {
+    const liveWashText = getCachedEl('hero-live-wash-text');
+    if (liveWashText) {
+      const washerId = state.activeWash.memberId;
+      const washerMember = (state.members && state.members[washerId]) ? state.members[washerId] : getCurrentDutyMember();
+      const elapsedSec = Math.max(0, Math.floor((Date.now() - state.activeWash.startedAt) / 1000));
+      const mins = Math.floor(elapsedSec / 60);
+      const secs = elapsedSec % 60;
+      const timeStr = mins > 0 ? `${mins} мин ${secs} сек` : `${secs} сек`;
+      const expectedText = `${washerMember.name} моет прямо сейчас (${timeStr})`;
+      if (liveWashText.textContent !== expectedText) {
+        liveWashText.textContent = expectedText;
+      }
+    }
+  }
+
+  const heroTimer = getCachedEl('hero-timer');
+  if (heroTimer && state.dutyStartedAt) {
+    const expectedDuty = `⏱️ ${formatDutyDuration(state.dutyStartedAt)}`;
+    if (heroTimer.textContent !== expectedDuty) {
+      heroTimer.textContent = expectedDuty;
+    }
+  }
+
+  const progressFill = getCachedEl('dish-progress-fill');
+  if (progressFill && state.dutyStartedAt) {
+    const elapsedHours = (Date.now() - state.dutyStartedAt) / 3600000;
+    const progress = Math.min(1, Math.max(0.04, elapsedHours / 24));
+    const circumference = 339.29;
+    const offset = String(circumference * (1 - progress));
+    if (progressFill.style.strokeDashoffset !== offset) {
+      progressFill.style.strokeDashoffset = offset;
+    }
+  }
+}
+
+let liveTickerInterval = null;
+function initLiveTicker() {
+  if (liveTickerInterval) clearInterval(liveTickerInterval);
+  liveTickerInterval = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    updateLiveTickers();
+  }, 1000);
+}
+
 // Rolling Number Ticker with Micro-Punch
 function animateNumber(element, startVal, endVal, duration = 650, templateFn = (v) => v) {
   if (!element) return;
@@ -1601,7 +1692,7 @@ function animateNumber(element, startVal, endVal, duration = 650, templateFn = (
 }
 
 function switchTab(targetTabId, shouldScroll = true) {
-  if (!targetTabId || !document.getElementById(targetTabId)) {
+  if (!targetTabId || !getCachedEl(targetTabId)) {
     targetTabId = 'tab-duty';
   }
 
@@ -1624,8 +1715,17 @@ function switchTab(targetTabId, shouldScroll = true) {
   settings.activeTab = targetTabId;
   saveSettings();
 
-  // Re-render active tab and ensure all views are fresh
-  renderAll();
+  // Lazy render: only render target tab if dirty or not yet rendered
+  if (targetTabId === 'tab-duty' && isDutyDirty) {
+    renderDutyTab();
+    isDutyDirty = false;
+  } else if (targetTabId === 'tab-history' && isHistoryDirty) {
+    renderHistory();
+    isHistoryDirty = false;
+  } else if (targetTabId === 'tab-stats' && isStatsDirty) {
+    renderStats();
+    isStatsDirty = false;
+  }
 
   if (shouldScroll) {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -1636,12 +1736,36 @@ function renderActiveTab() {
   renderAll();
 }
 
-function renderAll() {
+function renderAll(forceAll = false) {
   renderAuthStatus();
   renderProfileUI();
-  renderDutyTab();
-  renderHistory();
-  renderStats();
+
+  if (forceAll) {
+    renderDutyTab();
+    renderHistory();
+    renderStats();
+    isDutyDirty = false;
+    isHistoryDirty = false;
+    isStatsDirty = false;
+    return;
+  }
+
+  markAllTabsDirty();
+
+  const activeTab = settings.activeTab || 'tab-duty';
+  if (activeTab === 'tab-duty') {
+    renderDutyTab();
+    isDutyDirty = false;
+  } else if (activeTab === 'tab-history') {
+    renderHistory();
+    isHistoryDirty = false;
+  } else if (activeTab === 'tab-stats') {
+    renderStats();
+    isStatsDirty = false;
+  } else {
+    renderDutyTab();
+    isDutyDirty = false;
+  }
 }
 
 let lastRenderedQueueHash = '';
@@ -1652,17 +1776,17 @@ function renderDutyTab() {
   const debts = getActiveDebts();
 
   // Hero components
-  const heroCard = document.getElementById('duty-hero');
-  const heroAmbientGlow = document.getElementById('hero-ambient-glow');
-  const heroAvatar = document.getElementById('hero-avatar');
-  const heroName = document.getElementById('hero-name');
-  const heroRoleTitle = document.getElementById('hero-role-title');
-  const heroTimer = document.getElementById('hero-timer');
-  const heroStreak = document.getElementById('hero-streak');
-  const heroAura = document.getElementById('hero-aura');
-  const heroDebtBadge = document.getElementById('hero-debt-badge');
-  const washBtnTitle = document.getElementById('wash-btn-title');
-  const washBtnSub = document.getElementById('wash-btn-sub');
+  const heroCard = getCachedEl('duty-hero');
+  const heroAmbientGlow = getCachedEl('hero-ambient-glow');
+  const heroAvatar = getCachedEl('hero-avatar');
+  const heroName = getCachedEl('hero-name');
+  const heroRoleTitle = getCachedEl('hero-role-title');
+  const heroTimer = getCachedEl('hero-timer');
+  const heroStreak = getCachedEl('hero-streak');
+  const heroAura = getCachedEl('hero-aura');
+  const heroDebtBadge = getCachedEl('hero-debt-badge');
+  const washBtnTitle = getCachedEl('wash-btn-title');
+  const washBtnSub = getCachedEl('wash-btn-sub');
 
   if (heroDebtBadge) {
     if (dutyInfo.isDebtWorkoff) {
@@ -1700,7 +1824,7 @@ function renderDutyTab() {
     }
   }
 
-  const skipBtn = document.getElementById('btn-skip-duty');
+  const skipBtn = getCachedEl('btn-skip-duty');
   if (skipBtn) {
     if (dutyInfo.isDebtWorkoff) {
       skipBtn.style.opacity = '0.4';
@@ -1751,7 +1875,7 @@ function renderDutyTab() {
   }
 
   // Circular dish progress ring update
-  const progressFill = document.getElementById('dish-progress-fill');
+  const progressFill = getCachedEl('dish-progress-fill');
   if (progressFill && state.dutyStartedAt) {
     const elapsedHours = (Date.now() - state.dutyStartedAt) / 3600000;
     const progress = Math.min(1, Math.max(0.04, elapsedHours / 24));
@@ -1768,10 +1892,10 @@ function renderDutyTab() {
   }
 
   // Live Wash status bar & action buttons
-  const liveWashBar = document.getElementById('hero-live-wash-bar');
-  const liveWashText = document.getElementById('hero-live-wash-text');
-  const btnStartWash = document.getElementById('btn-start-wash');
-  const btnPingDuty = document.getElementById('btn-ping-duty');
+  const liveWashBar = getCachedEl('hero-live-wash-bar');
+  const liveWashText = getCachedEl('hero-live-wash-text');
+  const btnStartWash = getCachedEl('btn-start-wash');
+  const btnPingDuty = getCachedEl('btn-ping-duty');
 
   if (state.activeWash && state.activeWash.startedAt) {
     const washerId = state.activeWash.memberId;
@@ -1821,7 +1945,7 @@ function renderDutyTab() {
 }
 
 function renderQueueTrack() {
-  const track = document.getElementById('queue-track');
+  const track = getCachedEl('queue-track');
   if (!track) return;
 
   const currentBase = Array.isArray(state.baseQueue) ? state.baseQueue.join(',') : '';
@@ -1890,17 +2014,28 @@ function renderQueueTrack() {
   }
 }
 
-function renderActivityGlance() {
-  const glanceBox = document.getElementById('recent-glance-box');
-  if (!glanceBox) return;
-  glanceBox.innerHTML = '';
+let lastRenderedGlanceHash = '';
 
-  if (state.history.length === 0) {
+function renderActivityGlance() {
+  const glanceBox = getCachedEl('recent-glance-box');
+  if (!glanceBox) return;
+
+  if (!state.history || state.history.length === 0) {
+    if (lastRenderedGlanceHash === 'empty' && glanceBox.children.length > 0) return;
+    lastRenderedGlanceHash = 'empty';
     glanceBox.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:10px; font-size:0.85rem;">Пока нет записей. Нажмите «Я помыл посуду»!</div>`;
     return;
   }
 
-  state.history.slice(0, 3).forEach(item => {
+  const recentSlice = state.history.slice(0, 3);
+  const currentHash = recentSlice.map(item => `${item.id}-${item.timestamp}-${item.memberId}-${item.photo ? '1' : '0'}-${item.note || ''}`).join('|');
+  if (currentHash === lastRenderedGlanceHash && glanceBox.children.length > 0) {
+    return;
+  }
+  lastRenderedGlanceHash = currentHash;
+  glanceBox.innerHTML = '';
+
+  recentSlice.forEach(item => {
     const member = state.members[item.memberId] || { name: 'Неизвестный', avatar: '👤' };
     const dateStr = formatCompactDate(item.timestamp);
 
@@ -1930,10 +2065,23 @@ function renderActivityGlance() {
 
 let historyRenderLimit = 25;
 
+let lastRenderedHistoryHash = '';
+
 // Render Tab 2: Detailed History (Virtual Pagination & Delegated Events)
 function renderHistory() {
-  const timeline = document.getElementById('history-timeline');
+  const timeline = getCachedEl('history-timeline');
   if (!timeline) return;
+
+  const historyLen = (state.history || []).length;
+  const firstId = historyLen > 0 ? state.history[0].id : 0;
+  const lastId = historyLen > 0 ? state.history[historyLen - 1].id : 0;
+  const rxHash = historyLen > 0 ? (state.history || []).slice(0, 5).map(h => `${h.id}-${Object.values(h.reactions || {}).reduce((a, b) => a + b, 0)}`).join(':') : '';
+  const currentHash = `${historyLen}:${currentHistoryFilter}:${historyRenderLimit}:${firstId}:${lastId}:${rxHash}`;
+
+  if (currentHash === lastRenderedHistoryHash && timeline.children.length > 0) {
+    return;
+  }
+  lastRenderedHistoryHash = currentHash;
   timeline.innerHTML = '';
 
   // Filter history
@@ -1943,7 +2091,7 @@ function renderHistory() {
   }
 
   // Update filter chip buttons dynamically from state.members
-  const filterBar = document.getElementById('history-filter-bar') || document.querySelector('.history-filter-bar');
+  const filterBar = getCachedEl('history-filter-bar') || document.querySelector('.history-filter-bar');
   if (filterBar && state && state.members) {
     const totalCount = (state.history || []).length;
     let chipsHtml = `<button class="filter-chip ${currentHistoryFilter === 'all' ? 'active' : ''}" data-filter="all">Все (${totalCount})</button>`;
@@ -2112,19 +2260,29 @@ function renderHistory() {
   }
 }
 
+let lastRenderedStatsHash = '';
+
 // Render Tab 3: Stats & Awards
 function renderStats() {
-  const container = document.getElementById('leaderboard-list');
-  const totalBadge = document.getElementById('stat-total-badge');
-  const awardsContainer = document.getElementById('awards-grid');
-  const podiumContainer = document.getElementById('podium-container');
-  const shareBox = document.getElementById('duty-share-box');
-
-  if (container) container.innerHTML = '';
-  if (awardsContainer) awardsContainer.innerHTML = '';
+  const container = getCachedEl('leaderboard-list');
+  const totalBadge = getCachedEl('stat-total-badge');
+  const awardsContainer = getCachedEl('awards-grid');
+  const podiumContainer = getCachedEl('podium-container');
+  const shareBox = getCachedEl('duty-share-box');
 
   const stats = state.stats || {};
   const debts = getActiveDebts();
+  const historyLen = (state.history || []).length;
+  const queueStr = (state.queue || []).join(',');
+  const currentHash = `${JSON.stringify(stats)}:${debts.length}:${historyLen}:${queueStr}`;
+
+  if (currentHash === lastRenderedStatsHash && container && container.children.length > 0) {
+    return;
+  }
+  lastRenderedStatsHash = currentHash;
+
+  if (container) container.innerHTML = '';
+  if (awardsContainer) awardsContainer.innerHTML = '';
 
   const memberList = Object.values(state.members || DEFAULT_STATE.members).map(m => {
     const count = stats[m.id] || 0;
@@ -2153,7 +2311,7 @@ function renderStats() {
   }
 
   // 0. Render Weekly Digest / Highlights
-  const weeklyBox = document.getElementById('weekly-digest-box');
+  const weeklyBox = getCachedEl('weekly-digest-box');
   if (weeklyBox) {
     const oneWeekAgo = Date.now() - 7 * 86400000;
     const weekHistory = (state.history || []).filter(h => (h.timestamp || 0) >= oneWeekAgo);
@@ -3030,56 +3188,6 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Native Mobile Bottom Sheet Touch Drag-to-Dismiss
-let sheetStartY = 0;
-let sheetCurrentY = 0;
-let activeSheetCard = null;
-
-document.addEventListener('touchstart', (e) => {
-  const grabBar = e.target.closest('.sheet-grab-bar');
-  const modalCard = e.target.closest('.modal-card');
-  if (grabBar || (modalCard && modalCard.scrollTop <= 5)) {
-    sheetStartY = e.touches[0].clientY;
-    activeSheetCard = modalCard;
-  }
-}, { passive: true });
-
-document.addEventListener('touchmove', (e) => {
-  if (!activeSheetCard) return;
-  sheetCurrentY = e.touches[0].clientY;
-  const deltaY = sheetCurrentY - sheetStartY;
-  if (deltaY > 0) {
-    activeSheetCard.style.transform = `translateY(${deltaY}px)`;
-    activeSheetCard.style.transition = 'none';
-  }
-}, { passive: true });
-
-document.addEventListener('touchend', () => {
-  if (!activeSheetCard) return;
-  const deltaY = sheetCurrentY - sheetStartY;
-  activeSheetCard.style.transition = 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
-  if (deltaY > 90) {
-    activeSheetCard.style.transform = 'translateY(100%)';
-    const cardToReset = activeSheetCard;
-    setTimeout(() => {
-      closeAllModals();
-      if (cardToReset) {
-        cardToReset.style.transform = '';
-        cardToReset.style.transition = '';
-      }
-    }, 200);
-    if (window.soundFx) soundFx.playHaptic('light');
-  } else {
-    activeSheetCard.style.transform = '';
-    const cardToReset = activeSheetCard;
-    setTimeout(() => {
-      if (cardToReset) cardToReset.style.transition = '';
-    }, 240);
-  }
-  sheetStartY = 0;
-  sheetCurrentY = 0;
-  activeSheetCard = null;
-});
 
 function openSwapModal() {
   const current = getCurrentDutyMember();
@@ -3863,11 +3971,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Periodic timer for duty duration (every minute)
-  setInterval(() => {
-    const timerEl = document.getElementById('hero-timer');
-    if (timerEl) timerEl.textContent = formatDutyDuration(state.dutyStartedAt);
-  }, 60000);
+  // Unified lightweight live ticker (1s interval, auto-pauses when tab hidden)
+  initLiveTicker();
 
   // URL query params support for demo showcase & tab selection
   const urlParams = new URLSearchParams(window.location.search);

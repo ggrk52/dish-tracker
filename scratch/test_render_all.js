@@ -49,6 +49,7 @@ class MockElement {
   }
   setAttribute(k, v) { this.attributes[k] = String(v); }
   getAttribute(k) { return this.attributes[k] || null; }
+  getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 40 }; }
   querySelector() { return new MockElement(); }
   querySelectorAll() { return []; }
   appendChild(child) { this.children.push(child); }
@@ -145,6 +146,18 @@ try {
   // Verify duty-status-badge was populated
   const washBtnTitle = mockDocument.getElementById('wash-btn-title');
   console.log(`  ✅ Wash button label correctly rendered: "${washBtnTitle ? washBtnTitle.textContent : ''}"`);
+
+  // Verify switchTab to history (lazy render)
+  sandbox.switchTab('tab-history', false);
+  console.log('  ✅ switchTab("tab-history") executed cleanly with lazy rendering');
+
+  // Verify switchTab to stats (lazy render)
+  sandbox.switchTab('tab-stats', false);
+  console.log('  ✅ switchTab("tab-stats") executed cleanly with lazy rendering');
+
+  // Verify updateLiveTickers execution
+  sandbox.updateLiveTickers();
+  console.log('  ✅ updateLiveTickers() executed cleanly');
 
   console.log('🎉 ALL RENDER TESTS PASSED!');
 } catch (err) {

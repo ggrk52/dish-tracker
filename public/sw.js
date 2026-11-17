@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dish-duty-v17';
+const CACHE_NAME = 'dish-duty-v18';
 const ASSETS = [
   './',
   './index.html',
@@ -31,6 +31,23 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Never intercept API requests or SSE events
   if (event.request.url.includes('/api/')) {
+    return;
+  }
+
+  // Cache-first strategy for web fonts (zero-latency typography on weak connections)
+  if (event.request.url.includes('fonts.googleapis.com') || event.request.url.includes('fonts.gstatic.com')) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        }).catch(() => cached);
+      })
+    );
     return;
   }
 
