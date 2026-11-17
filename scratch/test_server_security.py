@@ -157,6 +157,11 @@ def test_server(server_cmd, server_name):
         papa_data = json.loads(b.decode())
         papa_token = papa_data["token"]
 
+        st, _, b = request(f"{base_url}/api/login", method="POST", data={"username": "vasya", "password": "3333"})
+        assert st == 200
+        vasya_data = json.loads(b.decode())
+        vasya_token = vasya_data["token"]
+
         # 2.3 Unauthenticated POST /api/state
         st, _, _ = request(f"{base_url}/api/state", method="POST", data={"_action": "reaction"})
         assert st == 401, f"Expected 401 for unauthenticated state update, got {st}"
@@ -173,7 +178,8 @@ def test_server(server_cmd, server_name):
         user_tokens = {
             "serezha": admin_token,
             "mama": mama_token,
-            "papa": papa_token
+            "papa": papa_token,
+            "vasya": vasya_token
         }
         curr_duty_id = state["queue"][state["currentQueueIndex"]]
         other_user = "papa" if curr_duty_id != "papa" else "mama"

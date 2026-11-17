@@ -1596,16 +1596,16 @@ function renderDutyTab() {
   if (heroDebtBadge) {
     if (dutyInfo.isDebtWorkoff) {
       heroDebtBadge.className = 'hero-debt-badge workoff';
-      heroDebtBadge.innerHTML = `⚡ ОТРАБОТКА ДОЛГА: за ${dutyInfo.scheduledMember.name} 🤝`;
+      heroDebtBadge.innerHTML = `Отработка долга за ${dutyInfo.scheduledMember.name}`;
       heroDebtBadge.classList.remove('hidden');
-      if (washBtnTitle) washBtnTitle.textContent = 'ЗАКРЫТЬ ДОЛГ! 🧼';
-      if (washBtnSub) washBtnSub.textContent = `Помыть за ${dutyInfo.scheduledMember.name} ✨`;
+      if (washBtnTitle) washBtnTitle.textContent = 'Закрыть долг';
+      if (washBtnSub) washBtnSub.textContent = `Помыть за ${dutyInfo.scheduledMember.name}`;
     } else if (dutyInfo.isCovering) {
       heroDebtBadge.className = 'hero-debt-badge workoff';
-      heroDebtBadge.innerHTML = `🛡️ ВЫРУЧАЕТ: ${dutyInfo.member.name} моет за ${dutyInfo.coveringFor.name} 🤝`;
+      heroDebtBadge.innerHTML = `Выручка: ${dutyInfo.member.name} моет за ${dutyInfo.coveringFor.name}`;
       heroDebtBadge.classList.remove('hidden');
-      if (washBtnTitle) washBtnTitle.textContent = 'ВЫРУЧИТЬ И ПОМЫТЬ! 🛡️';
-      if (washBtnSub) washBtnSub.textContent = `Записать долг на ${dutyInfo.coveringFor.name} ✨`;
+      if (washBtnTitle) washBtnTitle.textContent = 'Выручить и помыть';
+      if (washBtnSub) washBtnSub.textContent = `Смена запишется в долг ${dutyInfo.coveringFor.name}`;
     } else {
       const myDebts = debts.filter(d => d.fromMemberId === current.id);
       const debtsToMe = debts.filter(d => d.toMemberId === current.id);
@@ -1613,19 +1613,19 @@ function renderDutyTab() {
       if (myDebts.length > 0) {
         const creditorNames = myDebts.map(d => state.members[d.toMemberId]?.name || 'семьей').join(', ');
         heroDebtBadge.className = 'hero-debt-badge pending';
-        heroDebtBadge.innerHTML = `⚠️ Висит долг: ${myDebts.length} ${pluralize(myDebts.length, 'мойка', 'мойки', 'моек')} (перед ${creditorNames})`;
+        heroDebtBadge.innerHTML = `Долг: ${myDebts.length} ${pluralize(myDebts.length, 'мойка', 'мойки', 'моек')} (перед ${creditorNames})`;
         heroDebtBadge.classList.remove('hidden');
       } else if (debtsToMe.length > 0) {
         const debtorNames = debtsToMe.map(d => state.members[d.fromMemberId]?.name || 'кто-то').join(', ');
         heroDebtBadge.className = 'hero-debt-badge owed';
-        heroDebtBadge.innerHTML = `✨ Вам должны: ${debtsToMe.length} ${pluralize(debtsToMe.length, 'мойку', 'мойки', 'моек')} (${debtorNames})`;
+        heroDebtBadge.innerHTML = `Вам должны: ${debtsToMe.length} ${pluralize(debtsToMe.length, 'мойку', 'мойки', 'моек')} (${debtorNames})`;
         heroDebtBadge.classList.remove('hidden');
       } else {
         heroDebtBadge.className = 'hero-debt-badge hidden';
       }
 
-      if (washBtnTitle) washBtnTitle.textContent = 'Я ПОМЫЛ ПОСУДУ!';
-      if (washBtnSub) washBtnSub.textContent = 'Передать очередь дальше ✨';
+      if (washBtnTitle) washBtnTitle.textContent = 'Посуда помыта';
+      if (washBtnSub) washBtnSub.textContent = 'Передать очередь следующему';
     }
   }
 
@@ -2535,31 +2535,35 @@ function renderProfileUI() {
     if (!user) {
       washBtn.classList.add('btn-no-profile');
       washBtn.innerHTML = `
-        <span class="wash-icon">👤</span>
+        <span class="wash-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+        </span>
         <div class="wash-label-box">
-          <span class="wash-title">КТО ПОМЫЛ ПОСУДУ?</span>
-          <span class="wash-sub">Нажмите, чтобы войти в аккаунт 🔓</span>
+          <span class="wash-title">Кто помыл посуду?</span>
+          <span class="wash-sub">Войдите в профиль, чтобы отметить</span>
         </div>
       `;
     } else if (user.username === currentDuty.id) {
       washBtn.classList.add('btn-my-turn');
-      const actionTitle = (user.username === 'mama') ? 'Я ПОМЫЛА ПОСУДУ!' : 'Я ПОМЫЛ ПОСУДУ!';
+      const actionTitle = (user.username === 'mama') ? 'Посуда помыта' : 'Посуда помыта';
       washBtn.innerHTML = `
-        <div class="wash-btn-shine"></div>
-        <span class="wash-icon">🧼</span>
+        <span class="wash-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 3v2"/></svg>
+        </span>
         <div class="wash-label-box">
           <span class="wash-title">${actionTitle}</span>
-          <span class="wash-sub">Передать очередь дальше ✨ (+1 к рейтингу)</span>
+          <span class="wash-sub">Передать очередь следующему (+1 к рейтингу)</span>
         </div>
       `;
     } else if (isAdm) {
       washBtn.classList.add('btn-my-turn');
       washBtn.innerHTML = `
-        <div class="wash-btn-shine"></div>
-        <span class="wash-icon">👑</span>
+        <span class="wash-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1h10v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34"/><path d="M6 4h12v7a6 6 0 0 1-12 0V4Z"/></svg>
+        </span>
         <div class="wash-label-box">
-          <span class="wash-title">ОТМЕТИТЬ ЗА: ${currentDuty.name.toUpperCase()}</span>
-          <span class="wash-sub">Режим управления (Серёжа) ✨</span>
+          <span class="wash-title">Отметить за: ${currentDuty.name}</span>
+          <span class="wash-sub">Режим администратора</span>
         </div>
       `;
     } else {
@@ -2569,11 +2573,13 @@ function renderProfileUI() {
       if (userQueueIdx !== -1) {
         turnsRemaining = (userQueueIdx - state.currentQueueIndex + state.queue.length) % state.queue.length;
       }
-      const subMsg = (turnsRemaining === 1) ? '🔔 Вы следующий(ая) в очереди!' : `Отметить может только ${currentDuty.name} 🔒`;
+      const subMsg = (turnsRemaining === 1) ? 'Вы следующий в очереди' : `Отметить может только ${currentDuty.name}`;
       washBtn.innerHTML = `
-        <span class="wash-icon">⏳</span>
+        <span class="wash-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </span>
         <div class="wash-label-box">
-          <span class="wash-title">ДЕЖУРИТ: ${currentDuty.name.toUpperCase()}</span>
+          <span class="wash-title">Сейчас дежурит ${currentDuty.name}</span>
           <span class="wash-sub">${subMsg}</span>
         </div>
       `;
@@ -2973,14 +2979,14 @@ async function toggleWakeLock() {
     if (wakeLockSentinel) {
       await wakeLockSentinel.release();
       wakeLockSentinel = null;
-      btn.classList.remove('active');
+      if (btn) btn.classList.remove('active');
       soundFx.playClick();
     } else {
       wakeLockSentinel = await navigator.wakeLock.request('screen');
-      btn.classList.add('active');
+      if (btn) btn.classList.add('active');
       soundFx.playPop();
       wakeLockSentinel.addEventListener('release', () => {
-        btn.classList.remove('active');
+        if (btn) btn.classList.remove('active');
         wakeLockSentinel = null;
       });
     }
@@ -2998,7 +3004,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.documentElement.setAttribute('data-theme', theme);
     const themeBtnIcon = document.getElementById('btn-theme')?.querySelector('.btn-icon');
     if (themeBtnIcon) {
-      themeBtnIcon.textContent = (theme === 'dark') ? '☀️' : '🌙';
+      if (theme === 'dark') {
+        themeBtnIcon.innerHTML = `<svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
+      } else {
+        themeBtnIcon.innerHTML = `<svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`;
+      }
     }
     const quickThemeIcon = document.getElementById('quick-theme-icon');
     const quickThemeVal = document.getElementById('quick-theme-val');
@@ -3014,7 +3024,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSound = document.getElementById('btn-sound');
     if (btnSound) {
       const icon = btnSound.querySelector('.btn-icon');
-      if (icon) icon.textContent = soundEnabled ? '🔊' : '🔇';
+      if (icon) {
+        if (soundEnabled) {
+          icon.innerHTML = `<svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
+        } else {
+          icon.innerHTML = `<svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>`;
+        }
+      }
     }
     const quickSoundIcon = document.getElementById('quick-sound-icon');
     const quickSoundVal = document.getElementById('quick-sound-val');

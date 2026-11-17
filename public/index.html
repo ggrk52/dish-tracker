@@ -14,12 +14,12 @@
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
 
-  <!-- Fonts: JetBrains Mono + Manrope + Unbounded -->
+  <!-- Fonts: JetBrains Mono + Manrope -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=7.4">
+  <link rel="stylesheet" href="style.css?v=8.0">
 </head>
 <body>
   <!-- Canvas for celebration confetti & bubbles -->
@@ -50,11 +50,11 @@
         <div class="brand-text-block">
           <div class="brand-title-wrap">
             <h1 class="brand-title">Чистая Тарелка</h1>
-            <span class="brand-pro-badge">PRO</span>
+            <span class="brand-home-badge">семья</span>
           </div>
           <div class="cloud-indicator" id="cloud-indicator">
             <span class="cloud-dot"></span>
-            <span class="cloud-status-label" id="cloud-status-label">Raspberry Pi 5 🟢</span>
+            <span class="cloud-status-label" id="cloud-status-label">Сервер дома</span>
           </div>
         </div>
       </div>
@@ -62,19 +62,27 @@
       <div class="top-actions">
         <!-- Account Button in Header -->
         <button id="btn-account-badge" class="profile-pill-btn" type="button" title="Мой аккаунт">
-          <span id="account-badge-avatar" class="profile-pill-avatar">👤</span>
+          <span id="account-badge-avatar" class="profile-pill-avatar">
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+          </span>
           <span id="account-badge-name" class="profile-pill-name">Войти</span>
           <span id="account-badge-role" class="profile-pill-arrow">▾</span>
         </button>
 
         <button id="btn-sound" class="nav-icon-btn" type="button" title="Звуки" aria-label="Звуки">
-          <span class="btn-icon">🔊</span>
+          <span class="btn-icon">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          </span>
         </button>
         <button id="btn-theme" class="nav-icon-btn" type="button" title="Сменить тему" aria-label="Сменить тему">
-          <span class="btn-icon">🌙</span>
+          <span class="btn-icon">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </span>
         </button>
         <button id="btn-menu" class="nav-icon-btn" type="button" title="Настройки" aria-label="Настройки">
-          <span class="btn-icon">☰</span>
+          <span class="btn-icon">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+          </span>
         </button>
       </div>
     </header>
@@ -121,7 +129,7 @@
 
           <div class="duty-status-badge">
             <span class="pulsing-circle"></span>
-            <span id="hero-badge-title">СЕЙЧАС ДЕЖУРНЫЙ</span>
+            <span id="hero-badge-title">Сейчас дежурит</span>
           </div>
 
           <!-- Debt Status Badge -->
@@ -137,34 +145,36 @@
           <div class="duty-person-sub" id="hero-role-title">Определение дежурного...</div>
 
           <div class="duty-meta" id="hero-meta">
-            <span class="meta-tag timer-tag" id="hero-timer">⏱️ Синхронизация...</span>
-            <span class="meta-tag streak-tag" id="hero-streak">🧼 Статус: загрузка...</span>
+            <span class="meta-tag timer-tag" id="hero-timer">Синхронизация...</span>
+            <span class="meta-tag streak-tag" id="hero-streak">Статус: загрузка</span>
           </div>
 
           <!-- The Big Wash Button -->
           <button id="btn-wash-done" class="btn-wash-main">
             <div class="wash-btn-shine"></div>
-            <span class="wash-icon">🧼</span>
+            <span class="wash-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 3v2"/></svg>
+            </span>
             <div class="wash-label-box">
-              <span class="wash-title" id="wash-btn-title">Я ПОМЫЛ ПОСУДУ!</span>
-              <span class="wash-sub" id="wash-btn-sub">Передать очередь дальше ✨</span>
+              <span class="wash-title" id="wash-btn-title">Посуда помыта</span>
+              <span class="wash-sub" id="wash-btn-sub">Передать очередь следующему</span>
             </div>
           </button>
 
           <!-- Quick Turn Modifiers -->
           <div class="hero-quick-row">
             <button id="btn-swap-duty" class="quick-btn" type="button" title="Поменяться дежурством">
-              <span>🔄</span>
+              <svg class="btn-svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg>
               <span class="btn-text-full">Поменяться</span>
               <span class="btn-text-short">Обмен</span>
             </button>
             <button id="btn-skip-duty" class="quick-btn" type="button" title="Пропустить дежурство">
-              <span>⏩</span>
+              <svg class="btn-svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>
               <span class="btn-text-full">Пропустить</span>
               <span class="btn-text-short">Пасс</span>
             </button>
             <button id="btn-add-note" class="quick-btn" type="button" title="Отметить с заметкой или фото">
-              <span>📝</span>
+              <svg class="btn-svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               <span class="btn-text-full">С заметкой</span>
               <span class="btn-text-short">Заметка</span>
             </button>
@@ -175,7 +185,6 @@
         <div class="content-card">
           <div class="card-header">
             <div class="card-title">
-              <span class="title-icon">📋</span>
               <span>Очередь помывки</span>
             </div>
             <button id="btn-reorder-queue" class="pill-btn" type="button">Изменить порядок</button>
@@ -193,10 +202,9 @@
         <div class="content-card">
           <div class="card-header">
             <div class="card-title">
-              <span class="title-icon">⚡</span>
               <span>Последняя активность</span>
             </div>
-            <button id="btn-view-all-history" class="pill-btn" type="button">Вся история →</button>
+            <button id="btn-view-all-history" class="pill-btn" type="button">Вся история</button>
           </div>
           <div id="recent-glance-box" class="recent-glance-box">
             <!-- Rendered by JS -->
@@ -211,19 +219,19 @@
         <div class="content-card">
           <div class="card-header">
             <div>
-              <h2 class="card-title-large">📜 История дежурств</h2>
-              <p class="card-subtitle">Полный журнал с датами, заметками и похвалой</p>
+              <h2 class="card-title-large">История дежурств</h2>
+              <p class="card-subtitle">Журнал помывок, отметок и заметок</p>
             </div>
-            <button id="btn-export-history" class="pill-btn" title="Экспорт в CSV" type="button">📥 Скачать</button>
+            <button id="btn-export-history" class="pill-btn" title="Экспорт в CSV" type="button">Экспорт CSV</button>
           </div>
 
           <!-- History Filters -->
           <div class="history-filter-bar" id="history-filter-bar">
             <button class="filter-chip active" data-filter="all">Все (0)</button>
-            <button class="filter-chip" data-filter="admin">👑 Администратор</button>
-            <button class="filter-chip" data-filter="user1">👨‍🍳 Дежурный 1</button>
-            <button class="filter-chip" data-filter="user2">👩‍🍳 Дежурный 2</button>
-            <button class="filter-chip" data-filter="user3">🧑‍🍳 Дежурный 3</button>
+            <button class="filter-chip" data-filter="admin">Администратор</button>
+            <button class="filter-chip" data-filter="user1">Дежурный 1</button>
+            <button class="filter-chip" data-filter="user2">Дежурный 2</button>
+            <button class="filter-chip" data-filter="user3">Дежурный 3</button>
           </div>
 
           <!-- Timeline Container -->
@@ -240,11 +248,11 @@
         <div class="content-card">
           <div class="card-header">
             <div>
-              <h2 class="card-title-large">🏆 Доска почёта</h2>
-              <p class="card-subtitle">Кто в нашей семье чаще всех моет посуду</p>
+              <h2 class="card-title-large">Рейтинг и почёт</h2>
+              <p class="card-subtitle">Вклад каждого члена семьи в чистоту кухни</p>
             </div>
             <div class="stats-header-actions">
-              <button id="btn-share-family-report" class="pill-btn highlight-pill" type="button" title="Скопировать отчет для Telegram">📤 Поделиться</button>
+              <button id="btn-share-family-report" class="pill-btn highlight-pill" type="button" title="Скопировать отчет для Telegram">Поделиться</button>
               <span class="stats-badge-total" id="stat-total-badge">Всего: 0 моек</span>
             </div>
           </div>
@@ -268,8 +276,7 @@
         <!-- Fun Awards Card -->
         <div class="content-card">
           <h3 class="card-title">
-            <span class="title-icon">🎖️</span>
-            <span>Семейные награды</span>
+            <span>Семейные достижения</span>
           </h3>
           <div class="awards-grid" id="awards-grid">
             <!-- Dynamic awards -->
@@ -284,16 +291,22 @@
       <div class="tab-bar-pill" id="tab-bar-pill">
         <div class="tab-sliding-indicator" id="tab-sliding-indicator"></div>
         <button class="tab-item active" data-tab="tab-duty" type="button">
-          <span class="tab-icon">🧼</span>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 3v2"/></svg>
+          </span>
           <span class="tab-label">Дежурство</span>
         </button>
         <button class="tab-item" data-tab="tab-history" type="button">
-          <span class="tab-icon">📜</span>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </span>
           <span class="tab-label">История</span>
         </button>
         <button class="tab-item" data-tab="tab-stats" type="button">
-          <span class="tab-icon">🏆</span>
-          <span class="tab-label">Почёт</span>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1h10v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34"/><path d="M6 4h12v7a6 6 0 0 1-12 0V4Z"/></svg>
+          </span>
+          <span class="tab-label">Рейтинг</span>
         </button>
       </div>
     </nav>
