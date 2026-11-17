@@ -1665,10 +1665,10 @@ function renderDutyTab() {
   if (heroDebtBadge) {
     if (dutyInfo.isDebtWorkoff) {
       heroDebtBadge.className = 'hero-debt-badge workoff';
-      heroDebtBadge.innerHTML = `Отработка долга за ${dutyInfo.scheduledMember.name}`;
+      heroDebtBadge.innerHTML = `Отработка долга за ${getMemberAccusative(dutyInfo.scheduledMember)}`;
       heroDebtBadge.classList.remove('hidden');
       if (washBtnTitle) washBtnTitle.textContent = 'Закрыть долг';
-      if (washBtnSub) washBtnSub.textContent = `Помыть за ${dutyInfo.scheduledMember.name}`;
+      if (washBtnSub) washBtnSub.textContent = `Помыть за ${getMemberAccusative(dutyInfo.scheduledMember)}`;
     } else if (dutyInfo.isCovering) {
       heroDebtBadge.className = 'hero-debt-badge workoff';
       heroDebtBadge.innerHTML = `Выручка: ${dutyInfo.member.name} моет за ${dutyInfo.coveringFor.name}`;
@@ -2530,6 +2530,14 @@ function pluralize(n, one, two, five) {
   return five;
 }
 
+function getMemberAccusative(memberOrName) {
+  const name = (typeof memberOrName === 'string' ? memberOrName : (memberOrName?.name || '')).trim();
+  if (!name) return '';
+  if (name.endsWith('а')) return name.slice(0, -1) + 'у';
+  if (name.endsWith('я')) return name.slice(0, -1) + 'ю';
+  return name;
+}
+
 function escapeHtml(text) {
   const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
   return text.replace(/[&<>"']/g, m => map[m]);
@@ -2725,25 +2733,32 @@ function renderProfileUI() {
       `;
     } else if (user.username === currentDuty.id) {
       washBtn.classList.add('btn-my-turn');
-      const actionTitle = (user.username === 'mama') ? 'Посуда помыта' : 'Посуда помыта';
+      const dutyInfo = getEffectiveDuty(state);
+      const actionTitle = dutyInfo.isDebtWorkoff ? 'Закрыть долг' : 'Посуда помыта';
+      const actionSub = dutyInfo.isDebtWorkoff 
+        ? `Помыть за ${getMemberAccusative(dutyInfo.scheduledMember)}`
+        : 'Передать очередь следующему (+1 к рейтингу)';
       washBtn.innerHTML = `
         <span class="wash-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 3v2"/></svg>
         </span>
         <div class="wash-label-box">
           <span class="wash-title">${actionTitle}</span>
-          <span class="wash-sub">Передать очередь следующему (+1 к рейтингу)</span>
+          <span class="wash-sub">${actionSub}</span>
         </div>
       `;
     } else if (isAdm) {
       washBtn.classList.add('btn-my-turn');
+      const dutyInfo = getEffectiveDuty(state);
+      const actionTitle = dutyInfo.isDebtWorkoff ? `Закрыть долг: ${currentDuty.name}` : `Отметить за: ${currentDuty.name}`;
+      const actionSub = dutyInfo.isDebtWorkoff ? `Отработка за ${getMemberAccusative(dutyInfo.scheduledMember)}` : 'Режим администратора';
       washBtn.innerHTML = `
         <span class="wash-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1h10v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34"/><path d="M6 4h12v7a6 6 0 0 1-12 0V4Z"/></svg>
         </span>
         <div class="wash-label-box">
-          <span class="wash-title">Отметить за: ${currentDuty.name}</span>
-          <span class="wash-sub">Режим администратора</span>
+          <span class="wash-title">${actionTitle}</span>
+          <span class="wash-sub">${actionSub}</span>
         </div>
       `;
     } else {

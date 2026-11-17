@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=8.0">
+  <link rel="stylesheet" href="style.css?v=9.5">
 </head>
 <body>
   <!-- Canvas for celebration confetti & bubbles -->
@@ -136,11 +136,10 @@
           <div id="hero-debt-badge" class="hero-debt-badge hidden"></div>
 
           <div class="duty-avatar-box">
-            <svg class="dish-progress-ring" viewBox="0 0 120 120" width="120" height="120">
+            <svg class="dish-progress-ring" viewBox="0 0 120 120" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 1;" aria-hidden="true">
               <circle class="dish-progress-track" cx="60" cy="60" r="54" />
-              <circle class="dish-progress-fill" id="dish-progress-fill" cx="60" cy="60" r="54" stroke-dasharray="339.29" stroke-dashoffset="0" />
+              <circle class="dish-progress-fill" id="dish-progress-fill" cx="60" cy="60" r="54" stroke-dasharray="339.29" stroke-dashoffset="0" transform="rotate(-90 60 60)" />
             </svg>
-            <div class="avatar-aura-outer"></div>
             <div class="avatar-aura" id="hero-aura"></div>
             <div class="hero-avatar" id="hero-avatar">🍽️</div>
           </div>
@@ -699,6 +698,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=7.4"></script>
+  <script src="app.js?v=9.5"></script>
 </body>
 </html>

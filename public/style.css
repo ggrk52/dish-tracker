@@ -742,27 +742,31 @@ body::before {
 
 .duty-avatar-box {
   position: relative;
-  margin-bottom: 12px;
-  z-index: 2;
-  display: inline-flex;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 12px;
+  display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 2;
 }
 
 .dish-progress-ring {
   position: absolute;
-  inset: -12px;
+  top: 50%;
+  left: 50%;
   width: 120px;
   height: 120px;
-  transform: rotate(-90deg);
+  transform: translate(-50%, -50%);
   pointer-events: none;
-  z-index: 3;
+  z-index: 1;
 }
 
 .dish-progress-track {
   fill: none;
-  stroke: var(--line);
+  stroke: var(--line-strong);
   stroke-width: 3.5;
+  opacity: 0.5;
 }
 
 .dish-progress-fill {
@@ -772,23 +776,21 @@ body::before {
   stroke-linecap: round;
   stroke-dasharray: 339.29;
   stroke-dashoffset: 0;
+  transform-origin: 60px 60px;
   transition: stroke-dashoffset 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), stroke 0.4s ease;
 }
 
 .avatar-aura-outer {
-  position: absolute;
-  inset: -12px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  opacity: 0.5;
+  display: none !important;
 }
 
 .avatar-aura {
   position: absolute;
-  inset: -5px;
+  inset: -4px;
   border-radius: 50%;
   border: 1px solid var(--line-strong);
-  opacity: 0.8;
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 .hero-avatar {
@@ -3367,6 +3369,17 @@ body::before {
     width: 86px;
     height: 86px;
     font-size: 3.3rem;
+  }
+
+  .duty-avatar-box {
+    width: 86px;
+    height: 86px;
+    margin-bottom: 10px;
+  }
+
+  .dish-progress-ring {
+    width: 108px;
+    height: 108px;
   }
 
   .duty-person-name {
