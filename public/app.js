@@ -528,6 +528,46 @@ class SoundEngine {
     });
   }
 
+  playCeramicClink() {
+    if (!settings.sound) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    [1318.5, 2637].forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(i === 0 ? 0.15 : 0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    });
+  }
+
+  playGentleChime() {
+    if (!settings.sound) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const notes = [659.25, 880.0, 1174.66]; // E5, A5, D6 friendly bell
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const st = now + idx * 0.12;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, st);
+      gain.gain.setValueAtTime(0.12, st);
+      gain.gain.exponentialRampToValueAtTime(0.001, st + 0.5);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(st);
+      osc.stop(st + 0.52);
+    });
+  }
+
   playHaptic(style = 'light') {
     if (!('vibrate' in navigator)) return;
     try {
@@ -928,6 +968,8 @@ function updateConnectionUI(online) {
   }
 }
 
+let lastProcessedPingTs = 0;
+
 function applyServerState(serverState) {
   if (!serverState || !serverState.queue || !Array.isArray(serverState.queue)) return;
 
@@ -935,8 +977,32 @@ function applyServerState(serverState) {
   const lTakeover = state.pendingTakeover ? `${state.pendingTakeover.skippedBy}->${state.pendingTakeover.coveredBy}` : 'none';
   const sBase = Array.isArray(serverState.baseQueue) ? serverState.baseQueue.join(',') : '';
   const lBase = Array.isArray(state.baseQueue) ? state.baseQueue.join(',') : '';
-  const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}-${(serverState.debts || []).length}-${sTakeover}-${sBase}`;
-  const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}-${(state.debts || []).length}-${lTakeover}-${lBase}`;
+  const sWash = serverState.activeWash ? `${serverState.activeWash.memberId}-${serverState.activeWash.startedAt}` : 'none';
+  const lWash = state.activeWash ? `${state.activeWash.memberId}-${state.activeWash.startedAt}` : 'none';
+  const sPing = serverState.activePing ? `${serverState.activePing.from}-${serverState.activePing.to}-${serverState.activePing.timestamp}` : 'none';
+  const lPing = state.activePing ? `${state.activePing.from}-${state.activePing.to}-${state.activePing.timestamp}` : 'none';
+  
+  const sHash = `${serverState.currentQueueIndex}-${serverState.dutyStartedAt}-${(serverState.history || []).length}-${(serverState.debts || []).length}-${sTakeover}-${sBase}-${sWash}-${sPing}`;
+  const lHash = `${state.currentQueueIndex}-${state.dutyStartedAt}-${(state.history || []).length}-${(state.debts || []).length}-${lTakeover}-${lBase}-${lWash}-${lPing}`;
+
+  // Process incoming gentle reminder ping
+  if (serverState.activePing && serverState.activePing.timestamp > lastProcessedPingTs) {
+    lastProcessedPingTs = serverState.activePing.timestamp;
+    if (Date.now() - serverState.activePing.timestamp < 45000) {
+      const fromName = (serverState.members && serverState.members[serverState.activePing.from]) ? serverState.members[serverState.activePing.from].name : 'Семья';
+      const toName = (serverState.members && serverState.members[serverState.activePing.to]) ? serverState.members[serverState.activePing.to].name : 'дежурному';
+      const me = getCurrentUser();
+      if (me && me.username === serverState.activePing.to) {
+        showToast(`🔔 ${fromName} деликатно напоминает: раковина ждёт героя ✨`, 5000);
+        if (window.soundFx) {
+          soundFx.playGentleChime();
+          soundFx.playHaptic('reaction');
+        }
+      } else if (!me || me.username !== serverState.activePing.from) {
+        showToast(`🔔 ${fromName} напомнил(а) ${toName} о дежурстве ✨`, 4000);
+      }
+    }
+  }
 
   const wasInitial = !isInitialSyncDone;
   isInitialSyncDone = true;
@@ -951,7 +1017,9 @@ function applyServerState(serverState) {
       ...serverState,
       baseQueue,
       debts: Array.isArray(serverState.debts) ? serverState.debts : [],
-      pendingTakeover: serverState.pendingTakeover || null
+      pendingTakeover: serverState.pendingTakeover || null,
+      activeWash: serverState.activeWash || null,
+      activePing: serverState.activePing || null
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     renderAll();
@@ -959,6 +1027,7 @@ function applyServerState(serverState) {
     const newWasher = getCurrentDutyMember() ? getCurrentDutyMember().name : null;
     // Play celebration sound and effects only on user-driven transitions, not on hydration
     if (!wasInitial && prevWasher && newWasher && prevWasher !== newWasher) {
+      soundFx.playCeramicClink();
       soundFx.playVictory();
       celebration.burst(getCurrentDutyMember().color);
     }
@@ -1679,6 +1748,69 @@ function renderDutyTab() {
     }
   }
 
+  // Circular dish progress ring update
+  const progressFill = document.getElementById('dish-progress-fill');
+  if (progressFill && state.dutyStartedAt) {
+    const elapsedHours = (Date.now() - state.dutyStartedAt) / 3600000;
+    const progress = Math.min(1, Math.max(0.04, elapsedHours / 24));
+    const circumference = 339.29;
+    const offset = circumference * (1 - progress);
+    progressFill.style.strokeDashoffset = offset;
+    if (elapsedHours < 12) {
+      progressFill.style.stroke = 'var(--teal)';
+    } else if (elapsedHours < 24) {
+      progressFill.style.stroke = 'var(--amber)';
+    } else {
+      progressFill.style.stroke = 'var(--danger)';
+    }
+  }
+
+  // Live Wash status bar & action buttons
+  const liveWashBar = document.getElementById('hero-live-wash-bar');
+  const liveWashText = document.getElementById('hero-live-wash-text');
+  const btnStartWash = document.getElementById('btn-start-wash');
+  const btnPingDuty = document.getElementById('btn-ping-duty');
+
+  if (state.activeWash && state.activeWash.startedAt) {
+    const washerId = state.activeWash.memberId;
+    const washerMember = (state.members && state.members[washerId]) ? state.members[washerId] : current;
+    const elapsedSec = Math.max(0, Math.floor((Date.now() - state.activeWash.startedAt) / 1000));
+    const mins = Math.floor(elapsedSec / 60);
+    const secs = elapsedSec % 60;
+    const timeStr = mins > 0 ? `${mins} мин ${secs} сек` : `${secs} сек`;
+    if (liveWashBar) {
+      liveWashBar.classList.remove('hidden');
+      if (liveWashText) liveWashText.textContent = `${washerMember.name} моет прямо сейчас (${timeStr})`;
+    }
+    if (btnStartWash) {
+      btnStartWash.classList.add('active-washing');
+      const fullText = btnStartWash.querySelector('.btn-text-full');
+      const shortText = btnStartWash.querySelector('.btn-text-short');
+      if (fullText) fullText.textContent = 'Моет...';
+      if (shortText) shortText.textContent = 'Моет';
+    }
+  } else {
+    if (liveWashBar) liveWashBar.classList.add('hidden');
+    if (btnStartWash) {
+      btnStartWash.classList.remove('active-washing');
+      const fullText = btnStartWash.querySelector('.btn-text-full');
+      const shortText = btnStartWash.querySelector('.btn-text-short');
+      if (fullText) fullText.textContent = 'Мою сейчас';
+      if (shortText) shortText.textContent = 'Мою';
+    }
+  }
+
+  if (btnPingDuty) {
+    const me = getCurrentUser();
+    if (me && me.username === current.id) {
+      btnPingDuty.style.opacity = '0.5';
+      btnPingDuty.title = 'Вы сейчас дежурный';
+    } else {
+      btnPingDuty.style.opacity = '1';
+      btnPingDuty.title = `Напомнить ${current.name} о посуде`;
+    }
+  }
+
   // Queue track
   renderQueueTrack();
 
@@ -2016,6 +2148,54 @@ function renderStats() {
   if (totalBadge) {
     const badgeText = `Всего: ${totalWashes} ${pluralize(totalWashes, 'мойка', 'мойки', 'моек')}${debts.length > 0 ? ` (долгов: ${debts.length})` : ''}`;
     totalBadge.textContent = badgeText;
+  }
+
+  // 0. Render Weekly Digest / Highlights
+  const weeklyBox = document.getElementById('weekly-digest-box');
+  if (weeklyBox) {
+    const oneWeekAgo = Date.now() - 7 * 86400000;
+    const weekHistory = (state.history || []).filter(h => (h.timestamp || 0) >= oneWeekAgo);
+    const weekWashes = weekHistory.length;
+    const weekCounts = {};
+    let weekDebtSettled = 0;
+    weekHistory.forEach(h => {
+      if (h.memberId) {
+        weekCounts[h.memberId] = (weekCounts[h.memberId] || 0) + 1;
+      }
+      if (h.isDebtWorkoff) weekDebtSettled++;
+    });
+
+    let topWeekMember = null;
+    let maxWeekCount = 0;
+    for (const [mid, cnt] of Object.entries(weekCounts)) {
+      if (cnt > maxWeekCount) {
+        maxWeekCount = cnt;
+        topWeekMember = state.members[mid];
+      }
+    }
+
+    weeklyBox.innerHTML = `
+      <div class="weekly-digest-header">
+        <span class="weekly-digest-badge">Итоги недели</span>
+        <span class="weekly-digest-total">Всего за 7 дней: <strong>${weekWashes}</strong></span>
+      </div>
+      <div class="weekly-digest-grid">
+        <div class="weekly-metric-card">
+          <span class="weekly-metric-icon">🦸‍♂️</span>
+          <div class="weekly-metric-info">
+            <span class="weekly-metric-label">Герой недели</span>
+            <span class="weekly-metric-val">${topWeekMember ? topWeekMember.name : 'Вся семья'}${maxWeekCount > 0 ? ` (${maxWeekCount})` : ''}</span>
+          </div>
+        </div>
+        <div class="weekly-metric-card">
+          <span class="weekly-metric-icon">🤝</span>
+          <div class="weekly-metric-info">
+            <span class="weekly-metric-label">Возврат долгов</span>
+            <span class="weekly-metric-val">${weekDebtSettled} ${pluralize(weekDebtSettled, 'смена', 'смены', 'смен')}</span>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   // 1. Render 3D Podium for Top 3
@@ -2833,6 +3013,57 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// Native Mobile Bottom Sheet Touch Drag-to-Dismiss
+let sheetStartY = 0;
+let sheetCurrentY = 0;
+let activeSheetCard = null;
+
+document.addEventListener('touchstart', (e) => {
+  const grabBar = e.target.closest('.sheet-grab-bar');
+  const modalCard = e.target.closest('.modal-card');
+  if (grabBar || (modalCard && modalCard.scrollTop <= 5)) {
+    sheetStartY = e.touches[0].clientY;
+    activeSheetCard = modalCard;
+  }
+}, { passive: true });
+
+document.addEventListener('touchmove', (e) => {
+  if (!activeSheetCard) return;
+  sheetCurrentY = e.touches[0].clientY;
+  const deltaY = sheetCurrentY - sheetStartY;
+  if (deltaY > 0) {
+    activeSheetCard.style.transform = `translateY(${deltaY}px)`;
+    activeSheetCard.style.transition = 'none';
+  }
+}, { passive: true });
+
+document.addEventListener('touchend', () => {
+  if (!activeSheetCard) return;
+  const deltaY = sheetCurrentY - sheetStartY;
+  activeSheetCard.style.transition = 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
+  if (deltaY > 90) {
+    activeSheetCard.style.transform = 'translateY(100%)';
+    const cardToReset = activeSheetCard;
+    setTimeout(() => {
+      closeAllModals();
+      if (cardToReset) {
+        cardToReset.style.transform = '';
+        cardToReset.style.transition = '';
+      }
+    }, 200);
+    if (window.soundFx) soundFx.playHaptic('light');
+  } else {
+    activeSheetCard.style.transform = '';
+    const cardToReset = activeSheetCard;
+    setTimeout(() => {
+      if (cardToReset) cardToReset.style.transition = '';
+    }, 240);
+  }
+  sheetStartY = 0;
+  sheetCurrentY = 0;
+  activeSheetCard = null;
+});
+
 function openSwapModal() {
   const current = getCurrentDutyMember();
   const grid = document.getElementById('swap-member-list');
@@ -2970,6 +3201,8 @@ function openReorderModal() {
 // ========================================================
 async function toggleWakeLock() {
   const btn = document.getElementById('btn-wake');
+  const val = document.getElementById('quick-wake-val');
+  const icon = document.getElementById('quick-wake-icon');
   if (!('wakeLock' in navigator)) {
     alert('Ваш браузер не поддерживает удержание экрана активным.');
     return;
@@ -2980,13 +3213,21 @@ async function toggleWakeLock() {
       await wakeLockSentinel.release();
       wakeLockSentinel = null;
       if (btn) btn.classList.remove('active');
+      if (val) val.textContent = 'Не гасить';
+      if (icon) icon.textContent = '📱';
       soundFx.playClick();
+      showToast('Удержание экрана выключено', '📱');
     } else {
       wakeLockSentinel = await navigator.wakeLock.request('screen');
       if (btn) btn.classList.add('active');
+      if (val) val.textContent = 'Включён 🟢';
+      if (icon) icon.textContent = '🔆';
       soundFx.playPop();
+      showToast('Экран кухни: удержание включено ✨', '🔆');
       wakeLockSentinel.addEventListener('release', () => {
         if (btn) btn.classList.remove('active');
+        if (val) val.textContent = 'Не гасить';
+        if (icon) icon.textContent = '📱';
         wakeLockSentinel = null;
       });
     }
@@ -3251,6 +3492,71 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnUndo) {
     btnUndo.addEventListener('click', () => {
       handleUndo();
+    });
+  }
+
+  // Start/Cancel Live Wash Timer
+  const btnStartWash = document.getElementById('btn-start-wash');
+  if (btnStartWash) {
+    btnStartWash.addEventListener('click', async () => {
+      const user = getCurrentUser();
+      const currentDuty = getCurrentDutyMember();
+      if (!user) {
+        openLoginModal('admin');
+        return;
+      }
+      if (user.username !== currentDuty.id && !isAdmin()) {
+        showToast(`Включить таймер может только ${currentDuty.name} (или Серёжа)`, '⏳');
+        if (window.soundFx) soundFx.playPop();
+        return;
+      }
+
+      if (state.activeWash) {
+        if (window.soundFx) soundFx.playClick();
+        await updateState({ _action: 'cancel_wash' });
+        showToast('Таймер помывки остановлен', '⏹️');
+      } else {
+        if (window.soundFx) {
+          soundFx.playWash();
+          soundFx.playHaptic('medium');
+        }
+        await updateState({ _action: 'start_wash' });
+        showToast(`⏱️ ${currentDuty.name} моет посуду! Таймер запущен`, '🧼');
+      }
+    });
+  }
+
+  const btnCancelWash = document.getElementById('btn-cancel-wash');
+  if (btnCancelWash) {
+    btnCancelWash.addEventListener('click', async () => {
+      if (window.soundFx) soundFx.playClick();
+      await updateState({ _action: 'cancel_wash' });
+      showToast('Таймер помывки сброшен', '✕');
+    });
+  }
+
+  // Gentle Reminder Ping
+  const btnPingDuty = document.getElementById('btn-ping-duty');
+  if (btnPingDuty) {
+    btnPingDuty.addEventListener('click', async () => {
+      const user = getCurrentUser();
+      const currentDuty = getCurrentDutyMember();
+      if (!user) {
+        openLoginModal('admin');
+        return;
+      }
+      if (user.username === currentDuty.id) {
+        showToast('Вы сами дежурный! Пора мыть посуду 😊', '🧼');
+        if (window.soundFx) soundFx.playPop();
+        return;
+      }
+
+      if (window.soundFx) {
+        soundFx.playGentleChime();
+        soundFx.playHaptic('reaction');
+      }
+      await updateState({ _action: 'ping' });
+      showToast(`🔔 Напоминание отправлено ${currentDuty.name}!`, '✨');
     });
   }
 

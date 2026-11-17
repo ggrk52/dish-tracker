@@ -390,7 +390,31 @@ const server = http.createServer((req, res) => {
             }
           }
           saveStateToDisk(currState);
+        } else if (action === 'ping') {
+          currState.activePing = {
+            from: authUser,
+            to: currDutyId,
+            timestamp: Date.now()
+          };
+          saveStateToDisk(currState);
+        } else if (action === 'start_wash') {
+          const isDuty = (currDutyId && authUser === currDutyId);
+          if (!isAdmin && !isDuty) {
+            res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'Включить таймер помывки может только дежурный' }));
+            return;
+          }
+          currState.activeWash = {
+            memberId: (isAdmin && parsedState.memberId) ? parsedState.memberId : (currDutyId || authUser),
+            startedAt: Date.now()
+          };
+          saveStateToDisk(currState);
+        } else if (action === 'cancel_wash') {
+          currState.activeWash = null;
+          saveStateToDisk(currState);
         } else if (['wash', 'wash_done'].includes(action)) {
+          currState.activeWash = null;
+          currState.activePing = null;
           const isDuty = (currDutyId && authUser === currDutyId);
           if (!isAdmin && !isDuty) {
             const currDutyName = (currState.members && currState.members[currDutyId]) ? currState.members[currDutyId].name : 'дежурного';

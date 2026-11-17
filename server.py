@@ -575,7 +575,39 @@ class DishDutyHandler(SimpleHTTPRequestHandler):
                                     }
                         save_state(CURRENT_STATE)
 
+                    elif action == "ping":
+                        CURRENT_STATE["activePing"] = {
+                            "from": auth_user,
+                            "to": curr_duty_id,
+                            "timestamp": int(time.time() * 1000)
+                        }
+                        save_state(CURRENT_STATE)
+
+                    elif action == "start_wash":
+                        is_duty = (curr_duty_id and auth_user == curr_duty_id)
+                        if not is_admin and not is_duty:
+                            err_body = json.dumps({"error": "Включить таймер помывки может только дежурный"}, ensure_ascii=False).encode("utf-8")
+                            self.send_response(403)
+                            self.send_header("Content-Type", "application/json; charset=utf-8")
+                            self.send_header("Access-Control-Allow-Origin", "*")
+                            self.send_header("Content-Length", str(len(err_body)))
+                            self.end_headers()
+                            self.wfile.write(err_body)
+                            return
+
+                        CURRENT_STATE["activeWash"] = {
+                            "memberId": state_data.get("memberId") if (is_admin and state_data.get("memberId")) else (curr_duty_id or auth_user),
+                            "startedAt": int(time.time() * 1000)
+                        }
+                        save_state(CURRENT_STATE)
+
+                    elif action == "cancel_wash":
+                        CURRENT_STATE["activeWash"] = None
+                        save_state(CURRENT_STATE)
+
                     elif action in ["wash", "wash_done"]:
+                        CURRENT_STATE["activeWash"] = None
+                        CURRENT_STATE["activePing"] = None
                         # Проверка: дежурный или админ
                         is_duty = (curr_duty_id and auth_user == curr_duty_id)
                         if not is_admin and not is_duty:

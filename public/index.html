@@ -6,7 +6,7 @@
   <title>Чистая Тарелка — График мытья посуды</title>
   
   <!-- PWA & Mobile Meta Tags -->
-  <meta name="theme-color" content="#0b0b0d">
+  <meta name="theme-color" content="#161513">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Посуда">
@@ -136,6 +136,10 @@
           <div id="hero-debt-badge" class="hero-debt-badge hidden"></div>
 
           <div class="duty-avatar-box">
+            <svg class="dish-progress-ring" viewBox="0 0 120 120" width="120" height="120">
+              <circle class="dish-progress-track" cx="60" cy="60" r="54" />
+              <circle class="dish-progress-fill" id="dish-progress-fill" cx="60" cy="60" r="54" stroke-dasharray="339.29" stroke-dashoffset="0" />
+            </svg>
             <div class="avatar-aura-outer"></div>
             <div class="avatar-aura" id="hero-aura"></div>
             <div class="hero-avatar" id="hero-avatar">🍽️</div>
@@ -143,6 +147,13 @@
           
           <h2 class="duty-person-name" id="hero-name">—</h2>
           <div class="duty-person-sub" id="hero-role-title">Определение дежурного...</div>
+
+          <!-- Live Wash Timer Bar -->
+          <div id="hero-live-wash-bar" class="live-wash-bar hidden">
+            <span class="live-wash-dot"></span>
+            <span id="hero-live-wash-text" class="live-wash-text">Моет прямо сейчас (0 мин)</span>
+            <button id="btn-cancel-wash" class="live-cancel-btn" type="button" title="Отменить таймер">✕</button>
+          </div>
 
           <div class="duty-meta" id="hero-meta">
             <span class="meta-tag timer-tag" id="hero-timer">Синхронизация...</span>
@@ -161,8 +172,18 @@
             </div>
           </button>
 
-          <!-- Quick Turn Modifiers -->
+          <!-- Quick Turn Modifiers & Actions -->
           <div class="hero-quick-row">
+            <button id="btn-start-wash" class="quick-btn highlight-wash" type="button" title="Включить таймер: я мою прямо сейчас">
+              <svg class="btn-svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span class="btn-text-full">Мою сейчас</span>
+              <span class="btn-text-short">Мою</span>
+            </button>
+            <button id="btn-ping-duty" class="quick-btn" type="button" title="Дружески напомнить дежурному о посуде">
+              <svg class="btn-svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              <span class="btn-text-full">Напомнить</span>
+              <span class="btn-text-short">Звонок</span>
+            </button>
             <button id="btn-swap-duty" class="quick-btn" type="button" title="Поменяться дежурством">
               <svg class="btn-svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg>
               <span class="btn-text-full">Поменяться</span>
@@ -257,6 +278,11 @@
             </div>
           </div>
 
+          <!-- Weekly Highlights / Digest Card -->
+          <div id="weekly-digest-box" class="weekly-digest-box">
+            <!-- Rendered by JS -->
+          </div>
+
           <!-- 3D Podium for Top 3 -->
           <div class="podium-container" id="podium-container">
             <!-- Rendered by JS -->
@@ -323,7 +349,7 @@
         <button type="button" class="modal-close-btn" aria-label="Закрыть" onclick="closeAllModals()">&times;</button>
       </div>
 
-      <!-- Quick Toggles for Mobile (Theme & Sound) -->
+      <!-- Quick Toggles for Mobile (Theme, Sound, Wake Lock) -->
       <div class="settings-quick-toggles-row">
         <button id="btn-quick-theme" class="quick-toggle-card" type="button" aria-label="Сменить тему">
           <span class="quick-toggle-icon" id="quick-theme-icon">🌙</span>
@@ -337,6 +363,13 @@
           <div class="quick-toggle-text">
             <span class="quick-toggle-label">Звуки</span>
             <span class="quick-toggle-val" id="quick-sound-val">Включены</span>
+          </div>
+        </button>
+        <button id="btn-wake" class="quick-toggle-card" type="button" aria-label="Удержание экрана">
+          <span class="quick-toggle-icon" id="quick-wake-icon">📱</span>
+          <div class="quick-toggle-text">
+            <span class="quick-toggle-label">Экран кухни</span>
+            <span class="quick-toggle-val" id="quick-wake-val">Не гасить</span>
           </div>
         </button>
       </div>
