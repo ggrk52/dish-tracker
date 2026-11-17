@@ -1281,6 +1281,8 @@ function getCurrentDutyInfo() {
   };
 }
 
+const getEffectiveDuty = getCurrentDutyInfo;
+
 function getCurrentDutyMember() {
   return getCurrentDutyInfo().member;
 }
@@ -2733,7 +2735,7 @@ function renderProfileUI() {
       `;
     } else if (user.username === currentDuty.id) {
       washBtn.classList.add('btn-my-turn');
-      const dutyInfo = getEffectiveDuty(state);
+      const dutyInfo = getCurrentDutyInfo();
       const actionTitle = dutyInfo.isDebtWorkoff ? 'Закрыть долг' : 'Посуда помыта';
       const actionSub = dutyInfo.isDebtWorkoff 
         ? `Помыть за ${getMemberAccusative(dutyInfo.scheduledMember)}`
@@ -2749,7 +2751,7 @@ function renderProfileUI() {
       `;
     } else if (isAdm) {
       washBtn.classList.add('btn-my-turn');
-      const dutyInfo = getEffectiveDuty(state);
+      const dutyInfo = getCurrentDutyInfo();
       const actionTitle = dutyInfo.isDebtWorkoff ? `Закрыть долг: ${currentDuty.name}` : `Отметить за: ${currentDuty.name}`;
       const actionSub = dutyInfo.isDebtWorkoff ? `Отработка за ${getMemberAccusative(dutyInfo.scheduledMember)}` : 'Режим администратора';
       washBtn.innerHTML = `
